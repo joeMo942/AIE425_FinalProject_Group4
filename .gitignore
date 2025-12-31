@@ -1,1 +1,4 @@
 SECTION1_DimensionalityReduction/data/preprocessed_data.csv
+venv/
+*.csv
+__pycache__
