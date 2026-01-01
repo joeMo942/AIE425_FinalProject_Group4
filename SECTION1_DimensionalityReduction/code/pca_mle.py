@@ -57,8 +57,7 @@ print("\n" + "=" * 70)
 print("Phase 1: Compute MLE Covariance Matrix")
 print("=" * 70)
 
-print("\n[MLE Formula]: Cov(i,j) = Sum(X'_{u,i} × X'_{u,j}) / (|Common(i,j)| - 1)")
-print("[Constraint]: If |Common(i,j)| < 2, set Cov(i,j) = 0")
+
 
 # Check for cached covariance matrix
 cov_cache_path = os.path.join(RESULTS_DIR, 'mle_covariance_matrix.csv')
@@ -165,7 +164,7 @@ print("\n" + "=" * 70)
 print("Phase 3: Dimensionality Reduction - Calculate User Scores")
 print("=" * 70)
 
-print("\n[Formula]: t_{u,p} = Sum_{j in Observed(u)} (R_{u,j} - μ_j) × W_{j,p}")
+
 
 # Get all users
 all_users = sorted(df['user'].unique().tolist())
@@ -214,7 +213,7 @@ print("\n" + "=" * 70)
 print("Phase 4: Prediction via Reconstruction")
 print("=" * 70)
 
-print("\n[Formula]: r_hat_{u,i} = μ_i + Sum_{p=1}^k (t_{u,p} × W_{i,p})")
+
 
 prediction_results = []
 
