@@ -38,7 +38,7 @@ os.makedirs(TABLES_DIR, exist_ok=True)
 # 1. DATA PREPARATION (Memory Optimized)
 # =============================================================================
 
-def load_ratings_matrix(max_users=5000, max_items=2000):
+def load_ratings_matrix(max_users=10000, max_items=2000):
     """
     1.1 Load ratings matrix from preprocessed dataset.
     For memory efficiency, select top users and items by rating count.
@@ -93,6 +93,41 @@ def load_ratings_matrix(max_users=5000, max_items=2000):
     
     print(f"        Matrix dimensions: {ratings_matrix.shape[0]} users x {ratings_matrix.shape[1]} items")
     print(f"        Total cells: {ratings_matrix.shape[0] * ratings_matrix.shape[1]:,}")
+    
+    # Analyze user activity levels (based on % of items rated)
+    n_items_in_matrix = len(item_ids)
+    user_rating_counts = (~ratings_matrix.isna()).sum(axis=1)
+    user_rating_pct = user_rating_counts / n_items_in_matrix * 100
+    
+    cold_users = (user_rating_pct <= 2).sum()
+    medium_users = ((user_rating_pct > 2) & (user_rating_pct <= 5)).sum()
+    rich_users = (user_rating_pct > 10).sum()
+    
+    print(f"\n[USER ANALYSIS] User Activity Distribution:")
+    print(f"        Cold users (≤2% ratings): {cold_users:,}")
+    print(f"        Medium users (2-5% ratings): {medium_users:,}")
+    print(f"        Rich users (>10% ratings): {rich_users:,}")
+    
+    # Analyze item popularity (based on % of users who rated)
+    n_users_in_matrix = len(user_ids)
+    item_rating_counts = (~ratings_matrix.isna()).sum(axis=0)
+    item_rating_pct = item_rating_counts / n_users_in_matrix * 100
+    
+    low_pop_items = (item_rating_pct <= 2).sum()
+    medium_pop_items = ((item_rating_pct > 2) & (item_rating_pct <= 10)).sum()
+    high_pop_items = (item_rating_pct > 10).sum()
+    
+    print(f"\n[ITEM ANALYSIS] Item Popularity Distribution:")
+    print(f"        Low popularity (≤2% users): {low_pop_items:,}")
+    print(f"        Medium popularity (2-10% users): {medium_pop_items:,}")
+    print(f"        High popularity (>10% users): {high_pop_items:,}")
+    
+    # Verify dataset requirements
+    print(f"\n[VERIFY] Dataset Requirements Check:")
+    print(f"        ≥10,000 users: {len(user_ids):,} {'✓' if len(user_ids) >= 10000 else '✗'}")
+    print(f"        ≥500 items: {len(item_ids):,} {'✓' if len(item_ids) >= 500 else '✗'}")
+    n_ratings = (~ratings_matrix.isna()).sum().sum()
+    print(f"        ≥100,000 ratings: {n_ratings:,} {'✓' if n_ratings >= 100000 else '✗'}")
     
     # Clean up
     del df, df_filtered
@@ -1578,8 +1613,8 @@ def main():
     Includes: Data Preparation, Full SVD, Truncated SVD, Rating Prediction,
                 Latent Factor Interpretation, and Sensitivity Analysis.
     """
-    # 1. Data Preparation (with memory limits)
-    ratings_matrix, user_ids, item_ids = load_ratings_matrix(max_users=5000, max_items=2000)
+    # 1. Data Preparation (meeting dataset requirements: ≥10,000 users, ≥500 items)
+    ratings_matrix, user_ids, item_ids = load_ratings_matrix(max_users=10000, max_items=2000)
     
     # Keep a copy of the original sparse matrix for ground truth checking and sensitivity analysis
     original_ratings_matrix = ratings_matrix.copy()

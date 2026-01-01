@@ -2,11 +2,11 @@ SVD Orthogonality Verification Results
 ==================================================
 
 U^T*U = 1 (identity matrix) Verification:
-  Frobenius norm deviation: 2.36e-13
-  Max element deviation: 1.67e-14
+  Frobenius norm deviation: 3.55e-13
+  Max element deviation: 7.77e-15
   Is identity: True
 
 V^T*V = 1 (identity matrix) Verification:
-  Frobenius norm deviation: 1.92e-13
-  Max element deviation: 6.66e-15
+  Frobenius norm deviation: 1.89e-13
+  Max element deviation: 6.69e-15
   Is identity: True
