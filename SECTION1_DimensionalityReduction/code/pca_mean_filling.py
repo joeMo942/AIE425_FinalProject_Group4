@@ -373,24 +373,35 @@ for k_value, user_vectors, label in [(5, user_vectors_top5, "Top-5 PCs"),
             
             item_mean = item_means_dict.get(target_item, 0)
             
-            print(f"\n  Item I{i_idx} (Item {target_item}):")
-            print(f"    Item Mean (μ_i): {item_mean:.4f}")
-            print(f"    Neighbors Used: {n_used}")
-            print(f"    Predicted Rating: {predicted:.4f}")
+            # Round predicted to 2 decimals
+            predicted_rounded = round(predicted, 2)
+            item_mean_rounded = round(item_mean, 2)
+            
+            # Calculate error: use actual if available, else use item mean
             if actual_rating is not None:
-                print(f"    Actual Rating: {actual_rating}")
-                print(f"    Error: {abs(predicted - actual_rating):.4f}")
+                actual_for_error = actual_rating
+                actual_display = str(round(actual_rating, 2))
             else:
-                print(f"    Actual Rating: N/A (user hasn't rated this item)")
+                actual_for_error = item_mean
+                actual_display = f"{item_mean_rounded} (item mean)"
+            
+            error = round(abs(predicted - actual_for_error), 2)
+            
+            print(f"\n  Item I{i_idx} (Item {target_item}):")
+            print(f"    Item Mean: {item_mean_rounded}")
+            print(f"    Neighbors Used: {n_used}")
+            print(f"    Predicted Rating: {predicted_rounded}")
+            print(f"    Actual Rating: {actual_display}")
+            print(f"    Error: {error}")
             
             # Show top 5 neighbors for detail
             if neighbors:
                 print(f"    Top 5 Neighbors:")
                 for n_info in neighbors[:5]:
                     print(f"      User {n_info['neighbor_user']}: "
-                          f"Sim={n_info['similarity']:.4f}, "
-                          f"Rating={n_info['actual_rating']}, "
-                          f"Centered={n_info['centered_rating']:.4f}")
+                          f"Sim={round(n_info['similarity'], 2)}, "
+                          f"Rating={round(n_info['actual_rating'], 2)}, "
+                          f"Centered={round(n_info['centered_rating'], 2)}")
             
             prediction_results.append({
                 'PCs': k_value,
@@ -399,11 +410,12 @@ for k_value, user_vectors, label in [(5, user_vectors_top5, "Top-5 PCs"),
                 'User_ID': target_user,
                 'Target_Item': f'I{i_idx}',
                 'Item_ID': target_item,
-                'Item_Mean': item_mean,
+                'Item_Mean': item_mean_rounded,
                 'Neighbors_Used': n_used,
-                'Predicted_Rating': predicted,
-                'Actual_Rating': actual_rating,
-                'Error': abs(predicted - actual_rating) if actual_rating else None
+                'Predicted_Rating': predicted_rounded,
+                'Actual_Rating': actual_rating if actual_rating else item_mean_rounded,
+                'Actual_Source': 'actual' if actual_rating else 'item_mean',
+                'Error': error
             })
 
 # Save prediction results
@@ -418,13 +430,13 @@ print("PREDICTION SUMMARY")
 print("="*70)
 
 print("\n--- Rating Predictions Summary ---")
-print(f"{'PCs':<10} {'User':<8} {'Item':<8} {'Predicted':<12} {'Actual':<10} {'Error':<10}")
-print("-" * 58)
+print(f"{'PCs':<10} {'User':<8} {'Item':<8} {'Predicted':<12} {'Actual':<15} {'Source':<12} {'Error':<10}")
+print("-" * 75)
 for result in prediction_results:
-    actual_str = f"{result['Actual_Rating']}" if result['Actual_Rating'] else "N/A"
-    error_str = f"{result['Error']:.4f}" if result['Error'] else "N/A"
+    actual_str = str(result['Actual_Rating'])
+    source_str = result['Actual_Source']
     print(f"{result['PC_Label']:<10} {result['Target_User']:<8} {result['Target_Item']:<8} "
-          f"{result['Predicted_Rating']:<12.4f} {actual_str:<10} {error_str:<10}")
+          f"{result['Predicted_Rating']:<12} {actual_str:<15} {source_str:<12} {result['Error']:<10}")
 
 print("\n" + "="*70)
 print("[SUCCESS] All steps completed! (Steps 1-11)")
