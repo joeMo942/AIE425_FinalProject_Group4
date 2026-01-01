@@ -1576,7 +1576,7 @@ def main():
     """
     Main function to run the complete SVD analysis pipeline.
     Includes: Data Preparation, Full SVD, Truncated SVD, Rating Prediction,
-              Latent Factor Interpretation, and Sensitivity Analysis.
+                Latent Factor Interpretation, and Sensitivity Analysis.
     """
     # 1. Data Preparation (with memory limits)
     ratings_matrix, user_ids, item_ids = load_ratings_matrix(max_users=5000, max_items=2000)
