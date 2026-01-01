@@ -205,15 +205,24 @@ def compute_full_svd(filled_matrix):
     
     # Use the numpy array directly
     R = filled_matrix.astype(np.float64)  # Use float64 for SVD precision
-    print(f"\n[SVD] Computing full SVD for matrix R ({R.shape[0]} x {R.shape[1]})...")
+    m, n = R.shape
+    print(f"\n[SVD] Computing full SVD for matrix R ({m} x {n})...")
     print("        This may take a few minutes...")
     
     # Compute full SVD: R = U @ Sigma @ Vt
-    U, sigma, Vt = np.linalg.svd(R, full_matrices=False)
+    # full_matrices=True gives:
+    #   U: m x m (5000 x 5000)
+    #   sigma: min(m,n) singular values (2000)
+    #   Vt: n x n (2000 x 2000)
+    U, sigma, Vt = np.linalg.svd(R, full_matrices=True)
     
-    print(f"        U shape: {U.shape}")
-    print(f"        Sigma shape: {sigma.shape}")
-    print(f"        Vt shape: {Vt.shape}")
+    # Create full Sigma matrix (m x n) with singular values on diagonal
+    Sigma_full = np.zeros((m, n))
+    np.fill_diagonal(Sigma_full, sigma)
+    
+    print(f"        U shape: {U.shape} (m x m)")
+    print(f"        Σ shape: {Sigma_full.shape} (m x n)")
+    print(f"        Vt shape: {Vt.shape} (n x n)")
     
     # 2.2 Calculate eigenpairs
     print("\n[EIGEN] Computing eigenpairs from singular values...")
@@ -250,7 +259,7 @@ def compute_full_svd(filled_matrix):
 
 def verify_orthogonality(U, Vt):
     """
-    2.3 Verify orthogonality: U^T*U = I and V^T*V = I
+    2.3 Verify orthogonality: U^T*U = 1 and V^T*V = 1 (identity matrix)
     
     Args:
         U: Left singular vectors matrix.
@@ -263,13 +272,13 @@ def verify_orthogonality(U, Vt):
     
     results = {}
     
-    # Check U^T*U = I
+    # Check U^T*U = 1 (identity matrix)
     UtU = U.T @ U
     I_U = np.eye(UtU.shape[0])
     deviation_U = np.linalg.norm(UtU - I_U, 'fro')
     max_deviation_U = np.max(np.abs(UtU - I_U))
     
-    print(f"\n        U^T*U = I verification:")
+    print(f"\n        U^T*U = 1 (identity matrix) verification:")
     print(f"        Frobenius norm deviation: {deviation_U:.2e}")
     print(f"        Max element deviation: {max_deviation_U:.2e}")
     
@@ -277,14 +286,14 @@ def verify_orthogonality(U, Vt):
     results['UtU_max_deviation'] = max_deviation_U
     results['UtU_is_identity'] = deviation_U < 1e-10
     
-    # Check V^T*V = I (which is VVt since we have Vt)
+    # Check V^T*V = 1 (identity matrix)
     V = Vt.T
     VtV = V.T @ V
     I_V = np.eye(VtV.shape[0])
     deviation_V = np.linalg.norm(VtV - I_V, 'fro')
     max_deviation_V = np.max(np.abs(VtV - I_V))
     
-    print(f"\n        V^T*V = I verification:")
+    print(f"\n        V^T*V = 1 (identity matrix) verification:")
     print(f"        Frobenius norm deviation: {deviation_V:.2e}")
     print(f"        Max element deviation: {max_deviation_V:.2e}")
     
@@ -294,7 +303,7 @@ def verify_orthogonality(U, Vt):
     
     # Summary
     if results['UtU_is_identity'] and results['VtV_is_identity']:
-        print("\n        [OK] Orthogonality verified: U^T*U = I and V^T*V = I")
+        print("\n        [OK] Orthogonality verified: U^T*U = 1 and V^T*V = 1")
     else:
         print("\n        [NOTE] Orthogonality has small numerical deviations (expected for floating point)")
     
@@ -324,11 +333,11 @@ def save_svd_results(U, sigma, Vt, eigenvalues, eigenvectors, user_ids, item_ids
     with open(ortho_path, 'w') as f:
         f.write("SVD Orthogonality Verification Results\n")
         f.write("=" * 50 + "\n\n")
-        f.write("U^T*U = I Verification:\n")
+        f.write("U^T*U = 1 (identity matrix) Verification:\n")
         f.write(f"  Frobenius norm deviation: {ortho_results['UtU_frobenius_deviation']:.2e}\n")
         f.write(f"  Max element deviation: {ortho_results['UtU_max_deviation']:.2e}\n")
         f.write(f"  Is identity: {ortho_results['UtU_is_identity']}\n\n")
-        f.write("V^T*V = I Verification:\n")
+        f.write("V^T*V = 1 (identity matrix) Verification:\n")
         f.write(f"  Frobenius norm deviation: {ortho_results['VtV_frobenius_deviation']:.2e}\n")
         f.write(f"  Max element deviation: {ortho_results['VtV_max_deviation']:.2e}\n")
         f.write(f"  Is identity: {ortho_results['VtV_is_identity']}\n")
@@ -470,8 +479,8 @@ def print_summary(sigma, eigenvalues, ortho_results, n_90, n_95, n_99):
     print(f"    99% variance with {n_99} components ({n_99/len(sigma)*100:.1f}% of original)")
     
     print(f"\n  Orthogonality verification:")
-    print(f"    U^T*U = I: {'[OK] Verified' if ortho_results['UtU_is_identity'] else '[NOTE] Small deviation'}")
-    print(f"    V^T*V = I: {'[OK] Verified' if ortho_results['VtV_is_identity'] else '[NOTE] Small deviation'}")
+    print(f"    U^T*U = 1: {'[OK] Verified' if ortho_results['UtU_is_identity'] else '[NOTE] Small deviation'}")
+    print(f"    V^T*V = 1: {'[OK] Verified' if ortho_results['VtV_is_identity'] else '[NOTE] Small deviation'}")
     
     print("\n" + "=" * 60)
     print("[DONE] Full SVD Analysis Complete!")
