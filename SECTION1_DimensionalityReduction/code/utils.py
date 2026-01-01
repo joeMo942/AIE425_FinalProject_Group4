@@ -393,3 +393,151 @@ def predict_rating(target_user, target_item, user_vectors, item_means_dict,
     
     return predicted, len(top_neighbors), neighbor_details
 
+
+def compute_covariance_matrix_mle(df, items_list, item_means_df, show_progress=True):
+    """
+    Compute covariance matrix for items using MLE method.
+    
+    MLE method: Divides by (|Common(i,j)| - 1) instead of total users.
+    Only users who rated BOTH items contribute to the covariance sum.
+    If |Common(i,j)| < 2, set Cov(i,j) = 0.
+    
+    Formula: Cov(i,j) = Sum_{u in Common(i,j)} (X'_{u,i} × X'_{u,j}) / (|Common(i,j)| - 1)
+    
+    Args:
+        df: DataFrame containing user, item, and rating columns
+        items_list: List of item IDs
+        item_means_df: DataFrame with item and r_i_bar columns
+        show_progress: Whether to show progress updates
+    
+    Returns:
+        pd.DataFrame: Covariance matrix (n x n) for items
+    """
+    import numpy as np
+    
+    # Create item mean mapping
+    item_mean_map = item_means_df.set_index('item')['r_i_bar'].to_dict()
+    
+    # Filter to only the items in items_list
+    df_filtered = df[df['item'].isin(items_list)].copy()
+    
+    # Add centered ratings
+    df_filtered['item_mean'] = df_filtered['item'].map(item_mean_map)
+    df_filtered['centered_rating'] = df_filtered['rating'] - df_filtered['item_mean']
+    
+    if show_progress:
+        print(f"Building user-item centered rating structure...")
+    
+    # Create item index mapping for matrix positions
+    item_to_idx = {item: idx for idx, item in enumerate(items_list)}
+    n_items = len(items_list)
+    
+    # Build user ratings dictionary
+    user_ratings = {}
+    for user, group in df_filtered.groupby('user'):
+        user_ratings[user] = dict(zip(group['item'], group['centered_rating']))
+    
+    if show_progress:
+        print(f"Number of users with ratings: {len(user_ratings):,}")
+        print(f"Number of items: {n_items:,}")
+        print(f"Computing MLE covariance matrix ({n_items} x {n_items})...")
+    
+    # Initialize covariance sum matrix and count matrix
+    cov_sum = np.zeros((n_items, n_items), dtype=np.float64)
+    common_count = np.zeros((n_items, n_items), dtype=np.int64)
+    
+    # For each user, add their contribution to the covariance matrix
+    user_count = 0
+    for user, ratings in user_ratings.items():
+        items_rated = list(ratings.keys())
+        n_rated = len(items_rated)
+        
+        # For each pair of items this user rated
+        for i in range(n_rated):
+            item_i = items_rated[i]
+            idx_i = item_to_idx[item_i]
+            centered_i = ratings[item_i]
+            
+            for j in range(i, n_rated):
+                item_j = items_rated[j]
+                idx_j = item_to_idx[item_j]
+                centered_j = ratings[item_j]
+                
+                # Add product to covariance sum
+                product = centered_i * centered_j
+                cov_sum[idx_i, idx_j] += product
+                common_count[idx_i, idx_j] += 1
+                if i != j:
+                    cov_sum[idx_j, idx_i] += product  # Symmetric
+                    common_count[idx_j, idx_i] += 1
+        
+        user_count += 1
+        if show_progress and user_count % 50000 == 0:
+            print(f"  Processed {user_count:,} users...")
+    
+    # Compute covariance: divide by (common_count - 1)
+    # If common_count < 2, set covariance to 0
+    cov_matrix = np.zeros((n_items, n_items), dtype=np.float64)
+    for i in range(n_items):
+        for j in range(n_items):
+            if common_count[i, j] >= 2:
+                cov_matrix[i, j] = cov_sum[i, j] / (common_count[i, j] - 1)
+            else:
+                cov_matrix[i, j] = 0.0
+    
+    if show_progress:
+        print(f"MLE Covariance matrix computation complete!")
+    
+    # Create DataFrame with item labels
+    cov_df = pd.DataFrame(cov_matrix, index=items_list, columns=items_list)
+    cov_df.index.name = 'item'
+    
+    return cov_df
+
+
+def predict_rating_reconstruction(target_user, target_item, user_scores, W, 
+                                   item_means_dict, all_items):
+    """
+    Predict rating using reconstruction method (for MLE PCA).
+    
+    Formula: r_hat_{u,i} = μ_i + Sum_{p=1}^k (t_{u,p} × W_{i,p})
+    
+    Args:
+        target_user: The user for whom to predict
+        target_item: The item to predict rating for
+        user_scores: Dictionary {user_id: user_score_vector (T_u)}
+        W: Projection matrix (n_items x k)
+        item_means_dict: Dictionary {item_id: mean}
+        all_items: List of all items (defines row order in W)
+    
+    Returns:
+        float: Predicted rating
+    """
+    import numpy as np
+    
+    # Get item mean
+    item_mean = item_means_dict.get(target_item, 0)
+    
+    # Get user score vector (T_u)
+    if target_user not in user_scores:
+        return item_mean
+    
+    T_u = user_scores[target_user]
+    
+    # Get item index in W
+    if target_item not in all_items:
+        return item_mean
+    
+    item_idx = all_items.index(target_item)
+    
+    # Get item loadings (W_{i,:})
+    W_i = W[item_idx, :]
+    
+    # Compute prediction: μ_i + Sum(t_{u,p} × W_{i,p})
+    predicted = item_mean + np.dot(T_u, W_i)
+    
+    # Clip to valid rating range [1, 5]
+    predicted = max(1.0, min(5.0, predicted))
+    
+    return predicted
+
