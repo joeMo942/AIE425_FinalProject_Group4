@@ -247,3 +247,149 @@ def compute_covariance_matrix_efficient(df, items_list, item_means_df, total_use
     
     return cov_df
 
+
+def get_top_peers(cov_matrix, item_id, n_peers):
+    """
+    Get top n peers for an item based on covariance values.
+    
+    Args:
+        cov_matrix: Covariance matrix DataFrame
+        item_id: The item to find peers for
+        n_peers: Number of top peers to return
+    
+    Returns:
+        pd.Series: Top n peers with their covariance values
+    """
+    cov_values = cov_matrix.loc[item_id].copy()
+    cov_values = cov_values.drop(item_id)  # Remove self
+    top_peers = cov_values.sort_values(ascending=False).head(n_peers)
+    return top_peers
+
+
+def project_user(user_id, W, all_items, item_means_dict, user_ratings):
+    """
+    Project a single user into the reduced latent space.
+    
+    Formula: UserVector_u[dim] = Sum_{j in Observed} (R_{u,j} - μ_j) × W_{j, dim}
+    
+    Args:
+        user_id: The user to project
+        W: The projection matrix (n_items x k)
+        all_items: List of all items (defines row order in W)
+        item_means_dict: Dictionary {item_id: mean}
+        user_ratings: Dictionary {user_id: {item_id: rating}}
+    
+    Returns:
+        np.array: User vector of size k
+    """
+    import numpy as np
+    
+    k = W.shape[1]  # Number of dimensions (5 or 10)
+    user_vector = np.zeros(k)
+    
+    if user_id not in user_ratings:
+        return user_vector
+    
+    # Only iterate over items the user actually rated
+    for item_id, rating in user_ratings[user_id].items():
+        if item_id in item_means_dict:
+            # Get item index in W
+            item_idx = all_items.index(item_id)
+            # Centered rating: R_{u,j} - μ_j
+            centered_rating = rating - item_means_dict[item_id]
+            # Add contribution to each dimension
+            user_vector += centered_rating * W[item_idx, :]
+    
+    return user_vector
+
+
+def cosine_similarity(vec_u, vec_v):
+    """
+    Calculate cosine similarity between two user vectors.
+    
+    Formula: Sim(u, v) = (UserVector_u · UserVector_v) / (||UserVector_u|| × ||UserVector_v||)
+    
+    Args:
+        vec_u: First vector
+        vec_v: Second vector
+    
+    Returns:
+        float: Cosine similarity in range [-1, 1]
+    """
+    import numpy as np
+    
+    norm_u = np.linalg.norm(vec_u)
+    norm_v = np.linalg.norm(vec_v)
+    
+    if norm_u == 0 or norm_v == 0:
+        return 0.0
+    
+    return np.dot(vec_u, vec_v) / (norm_u * norm_v)
+
+
+def predict_rating(target_user, target_item, user_vectors, item_means_dict, 
+                   user_ratings, n_neighbors=20):
+    """
+    Predict rating for a target user on a target item.
+    
+    Formula: r_hat_{u,i} = μ_i + (Sum_{v in N} Sim(u,v) × (R_{v,i} - μ_i)) / (Sum_{v in N} |Sim(u,v)|)
+    
+    Args:
+        target_user: The user for whom to predict
+        target_item: The item to predict rating for
+        user_vectors: Dictionary {user_id: user_vector}
+        item_means_dict: Dictionary {item_id: mean}
+        user_ratings: Dictionary {user_id: {item_id: rating}}
+        n_neighbors: Number of nearest neighbors to use
+    
+    Returns:
+        tuple: (predicted_rating, neighbors_used, neighbor_details)
+    """
+    target_vec = user_vectors[target_user]
+    item_mean = item_means_dict.get(target_item, 0)
+    
+    # Calculate similarity with all other users who rated the target item
+    similarities = []
+    for user_id, user_vec in user_vectors.items():
+        if user_id == target_user:
+            continue
+        # Check if this user rated the target item
+        if user_id in user_ratings and target_item in user_ratings[user_id]:
+            sim = cosine_similarity(target_vec, user_vec)
+            actual_rating = user_ratings[user_id][target_item]
+            similarities.append((user_id, sim, actual_rating))
+    
+    if not similarities:
+        # No neighbors found, return item mean
+        return item_mean, 0, []
+    
+    # Sort by similarity (descending) and take top N neighbors
+    similarities.sort(key=lambda x: x[1], reverse=True)
+    top_neighbors = similarities[:n_neighbors]
+    
+    # Calculate weighted average
+    numerator = 0.0
+    denominator = 0.0
+    neighbor_details = []
+    
+    for user_id, sim, actual_rating in top_neighbors:
+        centered_rating = actual_rating - item_mean
+        numerator += sim * centered_rating
+        denominator += abs(sim)
+        neighbor_details.append({
+            'neighbor_user': user_id,
+            'similarity': sim,
+            'actual_rating': actual_rating,
+            'centered_rating': centered_rating
+        })
+    
+    if denominator == 0:
+        return item_mean, len(top_neighbors), neighbor_details
+    
+    predicted = item_mean + (numerator / denominator)
+    
+    # Clip to valid rating range [1, 5]
+    predicted = max(1.0, min(5.0, predicted))
+    
+    return predicted, len(top_neighbors), neighbor_details
+

@@ -14,7 +14,8 @@ PLOTS_DIR = os.path.join(CODE_DIR, '..', 'plots')
 from utils import (get_user_avg_ratings, get_item_avg_ratings, 
                    get_target_users, get_target_items,
                    get_preprocessed_dataset, create_user_item_matrix,
-                   mean_fill_matrix)
+                   mean_fill_matrix, get_top_peers, project_user,
+                   cosine_similarity, predict_rating)
 
 # Load user average ratings (r_u)
 r_u = get_user_avg_ratings()
@@ -28,11 +29,7 @@ print("Item Average Ratings (r_i):")
 print(r_i.head())
 print(f"Shape: {r_i.shape}")
 
-# Save Step 1 results
-print("\n[Saving Step 1 results...]")
-r_u.to_csv(os.path.join(RESULTS_DIR, 'step1_r_u.csv'), index=False)
-r_i.to_csv(os.path.join(RESULTS_DIR, 'step1_r_i.csv'), index=False)
-print("Saved r_u and r_i to results folder.")
+
 
 # =============================================================================
 # Step 2: Load target users and target items
@@ -48,14 +45,7 @@ target_items = get_target_items()
 print("\nTarget Items:")
 print(target_items)
 
-# Save Step 2 results
-print("\n[Saving Step 2 results...]")
-targets_df = pd.DataFrame({
-    'Target_Users': pd.Series(target_users),
-    'Target_Items': pd.Series(target_items)
-})
-targets_df.to_csv(os.path.join(RESULTS_DIR, 'step2_targets.csv'), index=False)
-print("Saved target users and items to results folder.")
+
 
 # =============================================================================
 # Step 3: Mean-Filling Method - Replace missing ratings with column means
@@ -104,16 +94,7 @@ print(rating_matrix_target.head(10))
 print("\n--- Filled Matrix (missing values replaced with mean) ---")
 print(rating_matrix_filled.head(10))
 
-# Save Step 3 results
-print("\n[Saving Step 3 results...]")
-rating_matrix_target.to_csv(os.path.join(RESULTS_DIR, 'step3_original_matrix.csv'))
-rating_matrix_filled.to_csv(os.path.join(RESULTS_DIR, 'step3_mean_filled_matrix.csv'))
-item_means_df = pd.DataFrame([
-    {'Target': 'I1', 'Item_ID': target_items[0], 'Mean': item_means[target_items[0]]},
-    {'Target': 'I2', 'Item_ID': target_items[1], 'Mean': item_means[target_items[1]]}
-])
-item_means_df.to_csv(os.path.join(RESULTS_DIR, 'step3_item_means.csv'), index=False)
-print("Saved original matrix, filled matrix, and item means to results folder.")
+
 
 # =============================================================================
 # Step 4: Calculate average rating for each item (using r_i)
@@ -130,10 +111,7 @@ for i, item_id in enumerate(target_items, 1):
     item_mean = r_i[r_i['item'] == item_id]['r_i_bar'].values[0]
     print(f"I{i} (Item {item_id}): Mean = {item_mean:.6f}")
 
-# Save Step 4 results (r_i is already item means)
-print("\n[Saving Step 4 results...]")
-r_i.to_csv(os.path.join(RESULTS_DIR, 'step4_all_item_means.csv'), index=False)
-print("Saved all item means to results folder.")
+
 
 # =============================================================================
 # Step 5: Calculate centered ratings (actual - mean) for ALL items
@@ -156,10 +134,7 @@ print(f"\n--- Centered ratings sample for target items (I1={target_items[0]}, I2
 df_centered_targets = df_centered[df_centered['item'].isin(target_items)]
 print(df_centered_targets.head(10))
 
-# Save Step 5 results
-print("\n[Saving Step 5 results...]")
-df_centered.to_csv(os.path.join(RESULTS_DIR, 'step5_centered_ratings.csv'), index=False)
-print(f"Saved centered ratings for ALL {df_centered.shape[0]:,} ratings to results folder.")
+
 
 # Step 6: Compute Covariance Matrix for ALL Items (Memory-Efficient)
 # =============================================================================
@@ -261,41 +236,8 @@ print(f"Shape: {top10_eigenvectors.shape} (n_items x 10)")
 W_top5 = top5_eigenvectors
 W_top10 = top10_eigenvectors
 
-# Save Step 7 results
-print("\n[Saving Step 7 results...]")
-
-# Save eigenvalues
-eigenvalues_df = pd.DataFrame({
-    'PC': [f'PC{i+1}' for i in range(len(eigenvalues))],
-    'Eigenvalue': eigenvalues,
-    'Variance_Explained_Pct': (eigenvalues / total_variance) * 100,
-    'Cumulative_Variance_Pct': np.cumsum(eigenvalues / total_variance) * 100
-})
-eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'step7_eigenvalues.csv'), index=False)
-print("Saved eigenvalues to results folder.")
-
-# Save top-5 eigenvectors (projection matrix W)
-W_top5_df = pd.DataFrame(W_top5, index=all_items, columns=[f'PC{i+1}' for i in range(5)])
-W_top5_df.index.name = 'item'
-W_top5_df.to_csv(os.path.join(RESULTS_DIR, 'step7_top5_eigenvectors.csv'))
-print("Saved top-5 eigenvectors (projection matrix W) to results folder.")
-
-# Save top-10 eigenvectors
-W_top10_df = pd.DataFrame(W_top10, index=all_items, columns=[f'PC{i+1}' for i in range(10)])
-W_top10_df.index.name = 'item'
-W_top10_df.to_csv(os.path.join(RESULTS_DIR, 'step7_top10_eigenvectors.csv'))
-print("Saved top-10 eigenvectors to results folder.")
-
 # --- Determine Top 5 and Top 10 Peers for Each Target Item ---
 print("\n--- Top Peers for Target Items (based on covariance) ---")
-
-# Function to get top peers for an item based on covariance
-def get_top_peers(cov_matrix, item_id, n_peers):
-    """Get top n peers for an item based on covariance values."""
-    cov_values = cov_matrix.loc[item_id].copy()
-    cov_values = cov_values.drop(item_id)  # Remove self
-    top_peers = cov_values.sort_values(ascending=False).head(n_peers)
-    return top_peers
 
 # Find top peers for each target item
 top_peers_results = {}
@@ -362,39 +304,7 @@ user_ratings = df.groupby('user').apply(
     lambda x: dict(zip(x['item'], x['rating']))
 ).to_dict()
 
-def project_user(user_id, W, all_items, item_means_dict, user_ratings):
-    """
-    Project a single user into the reduced latent space.
-    
-    Formula: UserVector_u[dim] = Sum_{j in Observed} (R_{u,j} - μ_j) × W_{j, dim}
-    
-    Args:
-        user_id: The user to project
-        W: The projection matrix (n_items x k)
-        all_items: List of all items (defines row order in W)
-        item_means_dict: Dictionary {item_id: mean}
-        user_ratings: Dictionary {user_id: {item_id: rating}}
-    
-    Returns:
-        np.array: User vector of size k
-    """
-    k = W.shape[1]  # Number of dimensions (5 or 10)
-    user_vector = np.zeros(k)
-    
-    if user_id not in user_ratings:
-        return user_vector
-    
-    # Only iterate over items the user actually rated
-    for item_id, rating in user_ratings[user_id].items():
-        if item_id in item_means_dict:
-            # Get item index in W
-            item_idx = all_items.index(item_id)
-            # Centered rating: R_{u,j} - μ_j
-            centered_rating = rating - item_means_dict[item_id]
-            # Add contribution to each dimension
-            user_vector += centered_rating * W[item_idx, :]
-    
-    return user_vector
+# project_user function imported from utils
 
 # Project all users using Top-5 PCs
 print("\nProjecting all users using Top-5 PCs...")
@@ -425,23 +335,7 @@ for i, user_id in enumerate(target_users, 1):
     print(f"  Top-5 Vector:  {user_vectors_top5[user_id]}")
     print(f"  Top-10 Vector: {user_vectors_top10[user_id]}")
 
-# Save Step 8 & 10 results
-print("\n[Saving Step 8 & 10 results...]")
 
-# Save user vectors for Top-5
-user_vectors_top5_df = pd.DataFrame(
-    [{'user': user, **{f'PC{j+1}': vec[j] for j in range(5)}} 
-     for user, vec in user_vectors_top5.items()]
-)
-user_vectors_top5_df.to_csv(os.path.join(RESULTS_DIR, 'step8_user_vectors_top5.csv'), index=False)
-
-# Save user vectors for Top-10
-user_vectors_top10_df = pd.DataFrame(
-    [{'user': user, **{f'PC{j+1}': vec[j] for j in range(10)}} 
-     for user, vec in user_vectors_top10.items()]
-)
-user_vectors_top10_df.to_csv(os.path.join(RESULTS_DIR, 'step10_user_vectors_top10.csv'), index=False)
-print("Saved user projection vectors to results folder.")
 
 # =============================================================================
 # Step 9 & 11: User Similarity and Rating Prediction
@@ -451,88 +345,7 @@ print("\n" + "="*70)
 print("Step 9 & 11: User Similarity and Rating Prediction")
 print("="*70)
 
-def cosine_similarity(vec_u, vec_v):
-    """
-    Calculate cosine similarity between two user vectors.
-    
-    Formula: Sim(u, v) = (UserVector_u · UserVector_v) / (||UserVector_u|| × ||UserVector_v||)
-    
-    Returns:
-        float: Cosine similarity in range [-1, 1]
-    """
-    norm_u = np.linalg.norm(vec_u)
-    norm_v = np.linalg.norm(vec_v)
-    
-    if norm_u == 0 or norm_v == 0:
-        return 0.0
-    
-    return np.dot(vec_u, vec_v) / (norm_u * norm_v)
-
-def predict_rating(target_user, target_item, user_vectors, item_means_dict, 
-                   user_ratings, n_neighbors=20):
-    """
-    Predict rating for a target user on a target item.
-    
-    Formula: r_hat_{u,i} = μ_i + (Sum_{v in N} Sim(u,v) × (R_{v,i} - μ_i)) / (Sum_{v in N} |Sim(u,v)|)
-    
-    Args:
-        target_user: The user for whom to predict
-        target_item: The item to predict rating for
-        user_vectors: Dictionary {user_id: user_vector}
-        item_means_dict: Dictionary {item_id: mean}
-        user_ratings: Dictionary {user_id: {item_id: rating}}
-        n_neighbors: Number of nearest neighbors to use
-    
-    Returns:
-        tuple: (predicted_rating, neighbors_used, neighbor_details)
-    """
-    target_vec = user_vectors[target_user]
-    item_mean = item_means_dict.get(target_item, 0)
-    
-    # Calculate similarity with all other users who rated the target item
-    similarities = []
-    for user_id, user_vec in user_vectors.items():
-        if user_id == target_user:
-            continue
-        # Check if this user rated the target item
-        if user_id in user_ratings and target_item in user_ratings[user_id]:
-            sim = cosine_similarity(target_vec, user_vec)
-            actual_rating = user_ratings[user_id][target_item]
-            similarities.append((user_id, sim, actual_rating))
-    
-    if not similarities:
-        # No neighbors found, return item mean
-        return item_mean, 0, []
-    
-    # Sort by similarity (descending) and take top N neighbors
-    similarities.sort(key=lambda x: x[1], reverse=True)
-    top_neighbors = similarities[:n_neighbors]
-    
-    # Calculate weighted average
-    numerator = 0.0
-    denominator = 0.0
-    neighbor_details = []
-    
-    for user_id, sim, actual_rating in top_neighbors:
-        centered_rating = actual_rating - item_mean
-        numerator += sim * centered_rating
-        denominator += abs(sim)
-        neighbor_details.append({
-            'neighbor_user': user_id,
-            'similarity': sim,
-            'actual_rating': actual_rating,
-            'centered_rating': centered_rating
-        })
-    
-    if denominator == 0:
-        return item_mean, len(top_neighbors), neighbor_details
-    
-    predicted = item_mean + (numerator / denominator)
-    
-    # Clip to valid rating range [1, 5]
-    predicted = max(1.0, min(5.0, predicted))
-    
-    return predicted, len(top_neighbors), neighbor_details
+# cosine_similarity and predict_rating functions imported from utils
 
 # Make predictions for target users on target items
 print("\n--- Rating Predictions for Target Users on Target Items ---")
