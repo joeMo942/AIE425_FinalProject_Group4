@@ -239,14 +239,25 @@ for k_value, user_scores, W, label in [(5, user_scores_top5, W_top5, "Top-5 PCs"
             
             item_mean = item_means_dict.get(target_item, 0)
             
-            print(f"\n  Item I{i_idx} (Item {target_item}):")
-            print(f"    Item Mean (μ_i): {item_mean:.4f}")
-            print(f"    Predicted Rating: {predicted:.4f}")
+            # Round predicted to 2 decimals
+            predicted_rounded = round(predicted, 2)
+            item_mean_rounded = round(item_mean, 2)
+            
+            # Calculate error: use actual if available, else use item mean
             if actual_rating is not None:
-                print(f"    Actual Rating: {actual_rating}")
-                print(f"    Error: {abs(predicted - actual_rating):.4f}")
+                actual_for_error = actual_rating
+                actual_display = str(round(actual_rating, 2))
             else:
-                print(f"    Actual Rating: N/A (user hasn't rated this item)")
+                actual_for_error = item_mean
+                actual_display = f"{item_mean_rounded} (item mean)"
+            
+            error = round(abs(predicted - actual_for_error), 2)
+            
+            print(f"\n  Item I{i_idx} (Item {target_item}):")
+            print(f"    Item Mean: {item_mean_rounded}")
+            print(f"    Predicted Rating: {predicted_rounded}")
+            print(f"    Actual Rating: {actual_display}")
+            print(f"    Error: {error}")
             
             prediction_results.append({
                 'Method': 'MLE',
@@ -256,10 +267,11 @@ for k_value, user_scores, W, label in [(5, user_scores_top5, W_top5, "Top-5 PCs"
                 'User_ID': target_user,
                 'Target_Item': f'I{i_idx}',
                 'Item_ID': target_item,
-                'Item_Mean': item_mean,
-                'Predicted_Rating': predicted,
-                'Actual_Rating': actual_rating,
-                'Error': abs(predicted - actual_rating) if actual_rating else None
+                'Item_Mean': item_mean_rounded,
+                'Predicted_Rating': predicted_rounded,
+                'Actual_Rating': actual_rating if actual_rating else item_mean_rounded,
+                'Actual_Source': 'actual' if actual_rating else 'item_mean',
+                'Error': error
             })
 
 # Save prediction results
@@ -276,13 +288,13 @@ print("\n" + "=" * 70)
 print("PREDICTION SUMMARY (MLE Method)")
 print("=" * 70)
 
-print(f"\n{'PCs':<12} {'User':<8} {'Item':<8} {'Predicted':<12} {'Actual':<10} {'Error':<10}")
-print("-" * 60)
+print(f"\n{'PCs':<12} {'User':<8} {'Item':<8} {'Predicted':<12} {'Actual':<15} {'Source':<12} {'Error':<10}")
+print("-" * 75)
 for result in prediction_results:
-    actual_str = f"{result['Actual_Rating']}" if result['Actual_Rating'] else "N/A"
-    error_str = f"{result['Error']:.4f}" if result['Error'] else "N/A"
+    actual_str = str(result['Actual_Rating'])
+    source_str = result['Actual_Source']
     print(f"{result['PC_Label']:<12} {result['Target_User']:<8} {result['Target_Item']:<8} "
-          f"{result['Predicted_Rating']:<12.4f} {actual_str:<10} {error_str:<10}")
+          f"{result['Predicted_Rating']:<12} {actual_str:<15} {source_str:<12} {result['Error']:<10}")
 
 print("\n" + "=" * 70)
 print("[SUCCESS] PCA MLE completed! (All phases)")
