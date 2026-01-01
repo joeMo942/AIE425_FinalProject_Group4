@@ -1065,26 +1065,527 @@ def print_truncated_svd_summary(error_df, optimal_k, predictions_df, accuracy):
 
 
 # =============================================================================
+# 6. LATENT FACTOR INTERPRETATION
+# =============================================================================
+
+def analyze_latent_factors(U, V, sigma, user_ids, item_ids, top_n_factors=3, top_k=10):
+    """
+    6.1-6.2 Analyze the top latent factors (largest singular values).
+    
+    For each factor:
+    - Identify items with highest absolute values in V
+    - Identify users with highest absolute values in U
+    - Attempt to interpret semantic meaning
+    
+    Args:
+        U: User latent factors matrix (m x r)
+        V: Item latent factors matrix (n x r) - Note: V = Vt.T
+        sigma: Singular values array
+        user_ids: Array of user IDs
+        item_ids: Array of item IDs
+        top_n_factors: Number of top factors to analyze
+        top_k: Number of top users/items to show per factor
+        
+    Returns:
+        dict: Analysis results for each factor
+    """
+    print("\n" + "=" * 60)
+    print("6. LATENT FACTOR INTERPRETATION")
+    print("=" * 60)
+    
+    results = {}
+    
+    print(f"\n[ANALYZE] Analyzing top-{top_n_factors} latent factors...")
+    print(f"          Each factor will show top-{top_k} users and items")
+    
+    for factor_idx in range(min(top_n_factors, len(sigma))):
+        print(f"\n" + "-" * 60)
+        print(f"  FACTOR {factor_idx + 1} (σ = {sigma[factor_idx]:.4f}, variance = {(sigma[factor_idx]**2 / (sigma**2).sum() * 100):.4f}%)")
+        print("-" * 60)
+        
+        factor_results = {
+            'singular_value': sigma[factor_idx],
+            'variance_pct': sigma[factor_idx]**2 / (sigma**2).sum() * 100
+        }
+        
+        # Get item loadings for this factor
+        item_loadings = V[:, factor_idx]
+        top_item_indices = np.argsort(np.abs(item_loadings))[::-1][:top_k]
+        
+        print(f"\n  Top-{top_k} Items (highest |V| values):")
+        factor_results['top_items'] = []
+        for rank, idx in enumerate(top_item_indices):
+            item_id = item_ids[idx]
+            loading = item_loadings[idx]
+            sign = "+" if loading > 0 else "-"
+            print(f"    {rank+1:2d}. Item {item_id:6d}: {sign}{abs(loading):.4f}")
+            factor_results['top_items'].append({
+                'item_id': item_id,
+                'loading': loading
+            })
+        
+        # Get user loadings for this factor
+        # For full SVD, U is m x m, so we need first r columns
+        user_loadings = U[:, factor_idx] if factor_idx < U.shape[1] else np.zeros(U.shape[0])
+        top_user_indices = np.argsort(np.abs(user_loadings))[::-1][:top_k]
+        
+        print(f"\n  Top-{top_k} Users (highest |U| values):")
+        factor_results['top_users'] = []
+        for rank, idx in enumerate(top_user_indices):
+            user_id = user_ids[idx]
+            loading = user_loadings[idx]
+            sign = "+" if loading > 0 else "-"
+            print(f"    {rank+1:2d}. User {user_id:6d}: {sign}{abs(loading):.4f}")
+            factor_results['top_users'].append({
+                'user_id': user_id,
+                'loading': loading
+            })
+        
+        # Interpretation hint
+        if factor_idx == 0:
+            print(f"\n  [INTERPRET] Factor 1 likely represents the GLOBAL MEAN effect")
+            print(f"              (captures overall rating tendency - most variance)")
+            factor_results['interpretation'] = "Global mean effect / baseline rating tendency"
+        elif factor_idx == 1:
+            print(f"\n  [INTERPRET] Factor 2 may represent a major GENRE or PREFERENCE dimension")
+            print(f"              (e.g., action vs drama, mainstream vs niche)")
+            factor_results['interpretation'] = "Major genre/preference dimension"
+        else:
+            print(f"\n  [INTERPRET] Factor {factor_idx+1} captures finer preference distinctions")
+            factor_results['interpretation'] = f"Fine-grained preference dimension {factor_idx+1}"
+        
+        results[f'factor_{factor_idx + 1}'] = factor_results
+    
+    # Save analysis to file
+    analysis_path = os.path.join(RESULTS_DIR, 'latent_factor_analysis.txt')
+    with open(analysis_path, 'w') as f:
+        f.write("Latent Factor Interpretation Analysis\n")
+        f.write("=" * 50 + "\n\n")
+        
+        for factor_idx in range(min(top_n_factors, len(sigma))):
+            factor_key = f'factor_{factor_idx + 1}'
+            factor_data = results[factor_key]
+            
+            f.write(f"FACTOR {factor_idx + 1}\n")
+            f.write(f"  Singular value: {factor_data['singular_value']:.4f}\n")
+            f.write(f"  Variance explained: {factor_data['variance_pct']:.4f}%\n")
+            f.write(f"  Interpretation: {factor_data['interpretation']}\n\n")
+            
+            f.write(f"  Top Items:\n")
+            for item in factor_data['top_items']:
+                f.write(f"    Item {item['item_id']}: {item['loading']:.4f}\n")
+            
+            f.write(f"\n  Top Users:\n")
+            for user in factor_data['top_users']:
+                f.write(f"    User {user['user_id']}: {user['loading']:.4f}\n")
+            
+            f.write("\n" + "-" * 50 + "\n\n")
+    
+    print(f"\n        [SAVED] {analysis_path}")
+    
+    return results
+
+
+def visualize_latent_space(U, V, sigma, user_ids, item_ids, ratings_matrix):
+    """
+    6.3 Visualize latent space by projecting users and items onto first 2 factors.
+    
+    Creates:
+    - Users projected onto factors 1 & 2
+    - Items projected onto factors 1 & 2
+    - Combined user-item scatter (sampled)
+    - Color-coded by activity level
+    
+    Args:
+        U: User latent factors matrix
+        V: Item latent factors matrix (V = Vt.T)
+        sigma: Singular values array
+        user_ids: Array of user IDs
+        item_ids: Array of item IDs
+        ratings_matrix: Original ratings matrix for activity calculation
+    """
+    print("\n[PLOT] Creating latent space visualizations...")
+    
+    # Get first 2 latent factors
+    # Scale by singular values for proper projection
+    U_proj = U[:, :2] * sigma[:2]  # Users in 2D latent space
+    V_proj = V[:, :2] * sigma[:2]  # Items in 2D latent space
+    
+    # Calculate activity levels
+    user_activity = (~ratings_matrix.isna()).sum(axis=1).values  # Number of ratings per user
+    item_popularity = (~ratings_matrix.isna()).sum(axis=0).values  # Number of ratings per item
+    
+    fig, axes = plt.subplots(2, 2, figsize=(14, 12))
+    
+    # Plot 1: Users in latent space
+    ax1 = axes[0, 0]
+    scatter1 = ax1.scatter(U_proj[:, 0], U_proj[:, 1], 
+                           c=user_activity, cmap='viridis', 
+                           alpha=0.5, s=10)
+    ax1.set_xlabel('Latent Factor 1', fontsize=11)
+    ax1.set_ylabel('Latent Factor 2', fontsize=11)
+    ax1.set_title('Users Projected onto First 2 Latent Factors', fontsize=12, fontweight='bold')
+    ax1.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+    ax1.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+    cbar1 = plt.colorbar(scatter1, ax=ax1)
+    cbar1.set_label('User Activity (# ratings)')
+    
+    # Plot 2: Items in latent space
+    ax2 = axes[0, 1]
+    scatter2 = ax2.scatter(V_proj[:, 0], V_proj[:, 1], 
+                           c=item_popularity, cmap='plasma', 
+                           alpha=0.5, s=10)
+    ax2.set_xlabel('Latent Factor 1', fontsize=11)
+    ax2.set_ylabel('Latent Factor 2', fontsize=11)
+    ax2.set_title('Items Projected onto First 2 Latent Factors', fontsize=12, fontweight='bold')
+    ax2.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+    ax2.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+    cbar2 = plt.colorbar(scatter2, ax=ax2)
+    cbar2.set_label('Item Popularity (# ratings)')
+    
+    # Plot 3: Combined (sampled for visibility)
+    ax3 = axes[1, 0]
+    # Sample for visibility
+    n_sample = min(500, len(U_proj), len(V_proj))
+    user_sample_idx = np.random.choice(len(U_proj), n_sample, replace=False)
+    item_sample_idx = np.random.choice(len(V_proj), n_sample, replace=False)
+    
+    ax3.scatter(U_proj[user_sample_idx, 0], U_proj[user_sample_idx, 1], 
+                c='blue', alpha=0.3, s=20, label='Users')
+    ax3.scatter(V_proj[item_sample_idx, 0], V_proj[item_sample_idx, 1], 
+                c='red', alpha=0.3, s=20, label='Items')
+    ax3.set_xlabel('Latent Factor 1', fontsize=11)
+    ax3.set_ylabel('Latent Factor 2', fontsize=11)
+    ax3.set_title('Users and Items in Latent Space (Sampled)', fontsize=12, fontweight='bold')
+    ax3.axhline(y=0, color='gray', linestyle='--', alpha=0.3)
+    ax3.axvline(x=0, color='gray', linestyle='--', alpha=0.3)
+    ax3.legend()
+    
+    # Plot 4: Distribution of latent factor values
+    ax4 = axes[1, 1]
+    ax4.hist(U_proj[:, 0], bins=50, alpha=0.5, label='Users - Factor 1', color='blue')
+    ax4.hist(V_proj[:, 0], bins=50, alpha=0.5, label='Items - Factor 1', color='red')
+    ax4.set_xlabel('Latent Factor 1 Value', fontsize=11)
+    ax4.set_ylabel('Frequency', fontsize=11)
+    ax4.set_title('Distribution of Factor 1 Values', fontsize=12, fontweight='bold')
+    ax4.legend()
+    
+    plt.tight_layout()
+    
+    plot_path = os.path.join(PLOTS_DIR, 'latent_space_visualization.png')
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"        [SAVED] {plot_path}")
+    plt.close()
+    
+    return plot_path
+
+
+# =============================================================================
+# 7. SENSITIVITY ANALYSIS
+# =============================================================================
+
+def test_missing_data_robustness(ratings_matrix, item_averages, U, sigma, Vt, 
+                                  missing_percentages=[10, 30, 50, 70]):
+    """
+    7.1 Test robustness to missing data.
+    
+    For each percentage:
+    - Start with current filled matrix
+    - Randomly mask additional ratings
+    - Perform SVD and measure reconstruction error
+    
+    Args:
+        ratings_matrix: Original sparse ratings matrix (before filling)
+        item_averages: Item average ratings for filling
+        U, sigma, Vt: Original SVD components
+        missing_percentages: List of missing percentages to test
+        
+    Returns:
+        pd.DataFrame: Results with error metrics per percentage
+    """
+    print("\n" + "=" * 60)
+    print("7. SENSITIVITY ANALYSIS")
+    print("=" * 60)
+    
+    print("\n[7.1] Testing robustness to missing data...")
+    print(f"      Percentages to test: {missing_percentages}%")
+    
+    results = []
+    
+    # Get current non-missing entries
+    original_mask = ~ratings_matrix.isna()
+    n_original_ratings = original_mask.sum().sum()
+    
+    print(f"      Original observed ratings: {n_original_ratings:,}")
+    
+    for pct in missing_percentages:
+        print(f"\n      Testing {pct}% additional missing...")
+        
+        # Create copy of original matrix
+        test_matrix = ratings_matrix.copy()
+        
+        # Get indices of observed ratings
+        observed_indices = np.argwhere(original_mask.values)
+        n_observed = len(observed_indices)
+        
+        # Randomly mask additional ratings
+        n_to_mask = int(n_observed * pct / 100)
+        mask_indices = np.random.choice(n_observed, n_to_mask, replace=False)
+        
+        for idx in mask_indices:
+            i, j = observed_indices[idx]
+            test_matrix.iloc[i, j] = np.nan
+        
+        # Calculate new sparsity
+        new_missing = test_matrix.isna().sum().sum()
+        total_cells = test_matrix.shape[0] * test_matrix.shape[1]
+        new_sparsity = new_missing / total_cells * 100
+        
+        # Apply mean filling
+        filled_test = test_matrix.values.astype(np.float32)
+        item_avg_array = item_averages.values.astype(np.float32)
+        
+        for j in range(filled_test.shape[1]):
+            col_mask = np.isnan(filled_test[:, j])
+            filled_test[col_mask, j] = item_avg_array[j]
+        
+        # Handle any remaining NaN
+        global_avg = np.nanmean(item_avg_array)
+        filled_test = np.nan_to_num(filled_test, nan=global_avg)
+        
+        # Perform SVD (use reduced for speed)
+        U_test, sigma_test, Vt_test = np.linalg.svd(filled_test, full_matrices=False)
+        
+        # Calculate reconstruction with k=100
+        k = min(100, len(sigma_test))
+        V_test = Vt_test.T
+        R_hat = (U_test[:, :k] * sigma_test[:k]) @ V_test[:, :k].T
+        
+        # Calculate error vs original filled matrix
+        error = filled_test - R_hat
+        mae = np.mean(np.abs(error))
+        rmse = np.sqrt(np.mean(error ** 2))
+        
+        results.append({
+            'missing_pct': pct,
+            'n_masked': n_to_mask,
+            'sparsity_pct': new_sparsity,
+            'MAE': mae,
+            'RMSE': rmse
+        })
+        
+        print(f"        Masked {n_to_mask:,} ratings, Sparsity: {new_sparsity:.2f}%")
+        print(f"        Reconstruction MAE: {mae:.4f}, RMSE: {rmse:.4f}")
+    
+    robustness_df = pd.DataFrame(results)
+    
+    # Save results
+    robustness_path = os.path.join(RESULTS_DIR, 'sensitivity_robustness.csv')
+    robustness_df.to_csv(robustness_path, index=False)
+    print(f"\n        [SAVED] {robustness_path}")
+    
+    return robustness_df
+
+
+def compare_filling_strategies(ratings_matrix, user_ids, item_ids):
+    """
+    7.2 Compare different mean-filling strategies.
+    
+    Strategies:
+    - Item mean: Fill missing with item's average rating
+    - User mean: Fill missing with user's average rating
+    
+    Args:
+        ratings_matrix: Original sparse ratings matrix
+        user_ids: Array of user IDs
+        item_ids: Array of item IDs
+        
+    Returns:
+        dict: Comparison results
+    """
+    print("\n[7.2] Comparing filling strategies...")
+    
+    results = {}
+    
+    # Strategy 1: Item mean (current approach)
+    print("\n      Strategy 1: Item Mean Filling")
+    item_averages = ratings_matrix.mean(axis=0, skipna=True)
+    filled_item = ratings_matrix.values.astype(np.float32).copy()
+    
+    for j in range(filled_item.shape[1]):
+        col_mask = np.isnan(filled_item[:, j])
+        filled_item[col_mask, j] = item_averages.iloc[j] if not np.isnan(item_averages.iloc[j]) else 3.0
+    
+    filled_item = np.nan_to_num(filled_item, nan=3.0)
+    
+    # SVD with item mean
+    U_item, sigma_item, Vt_item = np.linalg.svd(filled_item, full_matrices=False)
+    k = min(100, len(sigma_item))
+    V_item = Vt_item.T
+    R_hat_item = (U_item[:, :k] * sigma_item[:k]) @ V_item[:, :k].T
+    
+    mae_item = np.mean(np.abs(filled_item - R_hat_item))
+    rmse_item = np.sqrt(np.mean((filled_item - R_hat_item) ** 2))
+    
+    results['item_mean'] = {
+        'MAE': mae_item,
+        'RMSE': rmse_item,
+        'top_singular_values': sigma_item[:5].tolist()
+    }
+    print(f"        Reconstruction MAE: {mae_item:.4f}, RMSE: {rmse_item:.4f}")
+    
+    # Strategy 2: User mean
+    print("\n      Strategy 2: User Mean Filling")
+    user_averages = ratings_matrix.mean(axis=1, skipna=True)
+    filled_user = ratings_matrix.values.astype(np.float32).copy()
+    
+    for i in range(filled_user.shape[0]):
+        row_mask = np.isnan(filled_user[i, :])
+        filled_user[i, row_mask] = user_averages.iloc[i] if not np.isnan(user_averages.iloc[i]) else 3.0
+    
+    filled_user = np.nan_to_num(filled_user, nan=3.0)
+    
+    # SVD with user mean
+    U_user, sigma_user, Vt_user = np.linalg.svd(filled_user, full_matrices=False)
+    V_user = Vt_user.T
+    R_hat_user = (U_user[:, :k] * sigma_user[:k]) @ V_user[:, :k].T
+    
+    mae_user = np.mean(np.abs(filled_user - R_hat_user))
+    rmse_user = np.sqrt(np.mean((filled_user - R_hat_user) ** 2))
+    
+    results['user_mean'] = {
+        'MAE': mae_user,
+        'RMSE': rmse_user,
+        'top_singular_values': sigma_user[:5].tolist()
+    }
+    print(f"        Reconstruction MAE: {mae_user:.4f}, RMSE: {rmse_user:.4f}")
+    
+    # Comparison
+    print("\n      Comparison:")
+    print(f"        Item Mean - MAE: {mae_item:.4f}, RMSE: {rmse_item:.4f}")
+    print(f"        User Mean - MAE: {mae_user:.4f}, RMSE: {rmse_user:.4f}")
+    
+    if mae_item < mae_user:
+        print(f"        [RESULT] Item Mean filling shows lower error")
+        results['better_strategy'] = 'item_mean'
+    else:
+        print(f"        [RESULT] User Mean filling shows lower error")
+        results['better_strategy'] = 'user_mean'
+    
+    return results
+
+
+def visualize_sensitivity_analysis(robustness_df, filling_comparison):
+    """
+    Visualize sensitivity analysis results.
+    
+    Args:
+        robustness_df: DataFrame with robustness test results
+        filling_comparison: Dict with filling strategy comparison
+    """
+    print("\n[PLOT] Creating sensitivity analysis visualizations...")
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # Plot 1: Error vs Missing Percentage
+    ax1 = axes[0]
+    ax1.plot(robustness_df['missing_pct'], robustness_df['MAE'], 
+             'b-o', linewidth=2, markersize=8, label='MAE')
+    ax1.plot(robustness_df['missing_pct'], robustness_df['RMSE'], 
+             'r-s', linewidth=2, markersize=8, label='RMSE')
+    ax1.set_xlabel('Additional Missing Ratings (%)', fontsize=11)
+    ax1.set_ylabel('Reconstruction Error', fontsize=11)
+    ax1.set_title('Robustness to Missing Data', fontsize=12, fontweight='bold')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xticks(robustness_df['missing_pct'])
+    
+    # Plot 2: Filling Strategy Comparison
+    ax2 = axes[1]
+    strategies = ['Item Mean', 'User Mean']
+    mae_values = [filling_comparison['item_mean']['MAE'], 
+                  filling_comparison['user_mean']['MAE']]
+    rmse_values = [filling_comparison['item_mean']['RMSE'], 
+                   filling_comparison['user_mean']['RMSE']]
+    
+    x = np.arange(len(strategies))
+    width = 0.35
+    
+    bars1 = ax2.bar(x - width/2, mae_values, width, label='MAE', color='steelblue')
+    bars2 = ax2.bar(x + width/2, rmse_values, width, label='RMSE', color='coral')
+    
+    ax2.set_xlabel('Filling Strategy', fontsize=11)
+    ax2.set_ylabel('Reconstruction Error', fontsize=11)
+    ax2.set_title('Filling Strategy Comparison', fontsize=12, fontweight='bold')
+    ax2.set_xticks(x)
+    ax2.set_xticklabels(strategies)
+    ax2.legend()
+    ax2.grid(True, alpha=0.3, axis='y')
+    
+    # Add value labels on bars
+    for bar in bars1:
+        height = bar.get_height()
+        ax2.annotate(f'{height:.4f}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=9)
+    for bar in bars2:
+        height = bar.get_height()
+        ax2.annotate(f'{height:.4f}',
+                    xy=(bar.get_x() + bar.get_width() / 2, height),
+                    xytext=(0, 3), textcoords="offset points",
+                    ha='center', va='bottom', fontsize=9)
+    
+    plt.tight_layout()
+    
+    plot_path = os.path.join(PLOTS_DIR, 'sensitivity_analysis.png')
+    plt.savefig(plot_path, dpi=150, bbox_inches='tight')
+    print(f"        [SAVED] {plot_path}")
+    plt.close()
+    
+    return plot_path
+
+
+def print_sensitivity_summary(robustness_df, filling_comparison):
+    """
+    Print summary for sensitivity analysis.
+    """
+    print("\n" + "=" * 60)
+    print("SENSITIVITY ANALYSIS SUMMARY")
+    print("=" * 60)
+    
+    print("\n  7.1 Robustness to Missing Data:")
+    print(f"    Tested missing percentages: {robustness_df['missing_pct'].tolist()}%")
+    print(f"    RMSE range: {robustness_df['RMSE'].min():.4f} - {robustness_df['RMSE'].max():.4f}")
+    
+    print("\n  7.2 Filling Strategy Comparison:")
+    print(f"    Item Mean - MAE: {filling_comparison['item_mean']['MAE']:.4f}")
+    print(f"    User Mean - MAE: {filling_comparison['user_mean']['MAE']:.4f}")
+    print(f"    Better strategy: {filling_comparison['better_strategy'].replace('_', ' ').title()}")
+    
+    print("\n" + "=" * 60)
+    print("[DONE] Sensitivity Analysis Complete!")
+    print("=" * 60)
+
+
+# =============================================================================
 # MAIN EXECUTION
 # =============================================================================
 
 def main():
     """
     Main function to run the complete SVD analysis pipeline.
-    Includes: Data Preparation, Full SVD, Truncated SVD, and Rating Prediction.
+    Includes: Data Preparation, Full SVD, Truncated SVD, Rating Prediction,
+                Latent Factor Interpretation, and Sensitivity Analysis.
     """
     # 1. Data Preparation (with memory limits)
     ratings_matrix, user_ids, item_ids = load_ratings_matrix(max_users=5000, max_items=2000)
     
-    # Keep a copy of the original sparse matrix for ground truth checking
+    # Keep a copy of the original sparse matrix for ground truth checking and sensitivity analysis
     original_ratings_matrix = ratings_matrix.copy()
     
     item_averages = calculate_item_averages(ratings_matrix)
     filled_matrix = apply_mean_filling(ratings_matrix, item_averages)
-    
-    # Free memory from the ratings_matrix (but keep original_ratings_matrix)
-    del ratings_matrix
-    gc.collect()
     
     verify_completeness(filled_matrix)
     
@@ -1139,6 +1640,39 @@ def main():
     # Print summary for Sections 3 & 4
     print_truncated_svd_summary(error_df, optimal_k, predictions_df, accuracy)
     
+    # =========================================================================
+    # 6. LATENT FACTOR INTERPRETATION
+    # =========================================================================
+    
+    # Get V matrix from Vt
+    V = Vt.T
+    
+    # 6.1-6.2 Analyze top-3 latent factors
+    latent_factor_results = analyze_latent_factors(U, V, sigma, user_ids, item_ids)
+    
+    # 6.3 Visualize latent space
+    visualize_latent_space(U, V, sigma, user_ids, item_ids, original_ratings_matrix)
+    
+    # =========================================================================
+    # 7. SENSITIVITY ANALYSIS
+    # =========================================================================
+    
+    # 7.1 Test robustness to missing data
+    robustness_df = test_missing_data_robustness(
+        original_ratings_matrix, item_averages, U, sigma, Vt
+    )
+    
+    # 7.2 Compare filling strategies
+    filling_comparison = compare_filling_strategies(
+        original_ratings_matrix, user_ids, item_ids
+    )
+    
+    # Visualize sensitivity analysis
+    visualize_sensitivity_analysis(robustness_df, filling_comparison)
+    
+    # Print summary
+    print_sensitivity_summary(robustness_df, filling_comparison)
+    
     # Clean up
     del original_ratings_matrix
     gc.collect()
@@ -1157,10 +1691,14 @@ def main():
         'error_df': error_df,
         'optimal_k': optimal_k,
         'predictions_df': predictions_df,
-        'accuracy': accuracy
+        'accuracy': accuracy,
+        'latent_factor_results': latent_factor_results,
+        'robustness_df': robustness_df,
+        'filling_comparison': filling_comparison
     }
 
 
 if __name__ == "__main__":
     results = main()
+
 
