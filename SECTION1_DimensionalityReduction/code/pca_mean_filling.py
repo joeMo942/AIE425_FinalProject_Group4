@@ -178,7 +178,7 @@ print(cov_matrix.iloc[:5, :5])
 
 # Save Step 6 results
 print("\n[Saving Step 6 results...]")
-cov_matrix.to_csv(os.path.join(RESULTS_DIR, 'step6_covariance_matrix.csv'))
+cov_matrix.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_matrix.csv'))
 print(f"Saved full covariance matrix ({len(all_items)}x{len(all_items)}) to results folder.")
 
 # =============================================================================
@@ -325,7 +325,7 @@ for i, item_id in enumerate(target_items, 1):
             'Is_Top5': rank <= 5
         })
 top_peers_df = pd.DataFrame(top_peers_data)
-top_peers_df.to_csv(os.path.join(RESULTS_DIR, 'step7_target_item_peers.csv'), index=False)
+top_peers_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_target_item_peers.csv'), index=False)
 print("\nSaved top peers for I1 and I2 to results folder.")
 
 # =============================================================================
@@ -470,7 +470,7 @@ for k_value, user_vectors, label in [(5, user_vectors_top5, "Top-5 PCs"),
 # Save prediction results
 print("\n[Saving Step 9 & 11 results...]")
 predictions_df = pd.DataFrame(prediction_results)
-predictions_df.to_csv(os.path.join(RESULTS_DIR, 'step9_11_predictions.csv'), index=False)
+predictions_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_predictions.csv'), index=False)
 print("Saved prediction results to results folder.")
 
 # Summary table
