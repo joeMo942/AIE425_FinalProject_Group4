@@ -124,6 +124,24 @@ W_top10 = eigenvectors[:, :10]
 print(f"\nProjection matrix W_5 shape: {W_top5.shape}")
 print(f"Projection matrix W_10 shape: {W_top10.shape}")
 
+# Save top 5 and top 10 eigenvalues
+print("\n[Saving eigenvalues...]")
+top5_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(5)],
+    'Eigenvalue': eigenvalues[:5],
+    'Variance_Explained_Pct': (eigenvalues[:5] / total_variance) * 100
+})
+top5_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'mle_top5_eigenvalues.csv'), index=False)
+print("[Saved] mle_top5_eigenvalues.csv")
+
+top10_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(10)],
+    'Eigenvalue': eigenvalues[:10],
+    'Variance_Explained_Pct': (eigenvalues[:10] / total_variance) * 100
+})
+top10_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'mle_top10_eigenvalues.csv'), index=False)
+print("[Saved] mle_top10_eigenvalues.csv")
+
 # =============================================================================
 # Covariance Matrix: Before vs After Reduction
 # =============================================================================
@@ -172,38 +190,6 @@ print("[Saved] mle_covariance_after_top5.csv")
 # After Top-10 reduction
 cov_after_10.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_after_top10.csv'))
 print("[Saved] mle_covariance_after_top10.csv")
-
-# --- Top Peers for Target Items ---
-print("\n--- Top Peers for Target Items (based on MLE covariance) ---")
-
-top_peers_data = []
-for i, item_id in enumerate(target_items, 1):
-    print(f"\n--- Target Item I{i} (Item {item_id}) ---")
-    
-    # Top 5 peers
-    top5 = get_top_peers(cov_matrix_mle, item_id, 5)
-    print(f"\nTop 5 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top5.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-    
-    # Top 10 peers
-    top10 = get_top_peers(cov_matrix_mle, item_id, 10)
-    print(f"\nTop 10 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top10.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-        top_peers_data.append({
-            'Target_Item': f'I{i}',
-            'Target_Item_ID': item_id,
-            'Rank': rank,
-            'Peer_Item_ID': peer_id,
-            'Covariance': cov_val,
-            'Is_Top5': rank <= 5
-        })
-
-# Save top peers
-top_peers_df = pd.DataFrame(top_peers_data)
-top_peers_df.to_csv(os.path.join(RESULTS_DIR, 'mle_target_item_peers.csv'), index=False)
-print("\n[Saved] Top peers for I1 and I2.")
 
 # =============================================================================
 # Phase 3: Dimensionality Reduction - Project Users

@@ -236,6 +236,24 @@ print(f"Shape: {top10_eigenvectors.shape} (n_items x 10)")
 W_top5 = top5_eigenvectors
 W_top10 = top10_eigenvectors
 
+# Save top 5 and top 10 eigenvalues
+print("\n[Saving eigenvalues...]")
+top5_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(5)],
+    'Eigenvalue': eigenvalues[:5],
+    'Variance_Explained_Pct': (eigenvalues[:5] / total_variance) * 100
+})
+top5_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_top5_eigenvalues.csv'), index=False)
+print("[Saved] meanfill_top5_eigenvalues.csv")
+
+top10_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(10)],
+    'Eigenvalue': eigenvalues[:10],
+    'Variance_Explained_Pct': (eigenvalues[:10] / total_variance) * 100
+})
+top10_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_top10_eigenvalues.csv'), index=False)
+print("[Saved] meanfill_top10_eigenvalues.csv")
+
 # =============================================================================
 # Covariance Matrix: Before vs After Reduction
 # =============================================================================
@@ -284,49 +302,6 @@ print("[Saved] meanfill_covariance_after_top5.csv")
 # After Top-10 reduction
 cov_after_10.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_after_top10.csv'))
 print("[Saved] meanfill_covariance_after_top10.csv")
-
-# --- Determine Top 5 and Top 10 Peers for Each Target Item ---
-print("\n--- Top Peers for Target Items (based on covariance) ---")
-
-# Find top peers for each target item
-top_peers_results = {}
-for i, item_id in enumerate(target_items, 1):
-    print(f"\n--- Target Item I{i} (Item {item_id}) ---")
-    
-    # Top 5 peers
-    top5 = get_top_peers(cov_matrix, item_id, 5)
-    print(f"\nTop 5 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top5.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-    
-    # Top 10 peers
-    top10 = get_top_peers(cov_matrix, item_id, 10)
-    print(f"\nTop 10 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top10.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-    
-    top_peers_results[f'I{i}'] = {
-        'item_id': item_id,
-        'top5_peers': top5.index.tolist(),
-        'top10_peers': top10.index.tolist()
-    }
-
-# Save top peers for target items
-top_peers_data = []
-for i, item_id in enumerate(target_items, 1):
-    top10 = get_top_peers(cov_matrix, item_id, 10)
-    for rank, (peer_id, cov_val) in enumerate(top10.items(), 1):
-        top_peers_data.append({
-            'Target_Item': f'I{i}',
-            'Target_Item_ID': item_id,
-            'Rank': rank,
-            'Peer_Item_ID': peer_id,
-            'Covariance': cov_val,
-            'Is_Top5': rank <= 5
-        })
-top_peers_df = pd.DataFrame(top_peers_data)
-top_peers_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_target_item_peers.csv'), index=False)
-print("\nSaved top peers for I1 and I2 to results folder.")
 
 # =============================================================================
 # Step 8 & 10: Project Users into Reduced Latent Space (Top-5 and Top-10)
