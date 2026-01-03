@@ -258,49 +258,45 @@ print("[Saved] meanfill_top10_eigenvalues.csv")
 # Covariance Matrix: Before vs After Reduction
 # =============================================================================
 
-print("\n" + "="*70)
+print("\n" + "=" * 70)
 print("Covariance Matrix: Before vs After Reduction")
-print("="*70)
+print("=" * 70)
 
-# Before reduction: Original covariance matrix (for target items)
-print("\n--- BEFORE Reduction (Original Covariance for Target Items) ---")
-cov_before = cov_matrix.loc[target_items, target_items]
-print(cov_before.round(6))
+# Before reduction: Original covariance matrix (FULL)
+print("\n--- BEFORE Reduction (Original Covariance Matrix) ---")
+# cov_matrix is already the full matrix
+print(f"Shape: {cov_matrix.shape}")
 
 # After reduction: Reconstructed covariance using Top-5 and Top-10 PCs
 # Reconstructed Σ ≈ W @ Λ @ W.T where Λ = diag(eigenvalues[:k])
 
-# Top-5 reconstruction
+# Top-5 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-5 PCs)...")
 Lambda_5 = np.diag(eigenvalues[:5])
 cov_reconstructed_5 = W_top5 @ Lambda_5 @ W_top5.T
 cov_reconstructed_5_df = pd.DataFrame(cov_reconstructed_5, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_5_df.shape}")
 
-print("\n--- AFTER Reduction: Reconstructed Covariance (Top-5 PCs) for Target Items ---")
-cov_after_5 = cov_reconstructed_5_df.loc[target_items, target_items]
-print(cov_after_5.round(6))
-
-# Top-10 reconstruction
+# Top-10 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-10 PCs)...")
 Lambda_10 = np.diag(eigenvalues[:10])
 cov_reconstructed_10 = W_top10 @ Lambda_10 @ W_top10.T
 cov_reconstructed_10_df = pd.DataFrame(cov_reconstructed_10, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_10_df.shape}")
 
-print("\n--- AFTER Reduction: Reconstructed Covariance (Top-10 PCs) for Target Items ---")
-cov_after_10 = cov_reconstructed_10_df.loc[target_items, target_items]
-print(cov_after_10.round(6))
-
-# Save covariance files separately
-print("\n[Saving covariance matrices...]")
+# Save covariance files separately (FULL MATRICES)
+print("\n[Saving FULL covariance matrices...]")
 
 # Before reduction
-cov_before.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_before_reduction.csv'))
+cov_matrix.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_before_reduction.csv'))
 print("[Saved] meanfill_covariance_before_reduction.csv")
 
 # After Top-5 reduction
-cov_after_5.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_after_top5.csv'))
+cov_reconstructed_5_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_after_top5.csv'))
 print("[Saved] meanfill_covariance_after_top5.csv")
 
 # After Top-10 reduction
-cov_after_10.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_after_top10.csv'))
+cov_reconstructed_10_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_after_top10.csv'))
 print("[Saved] meanfill_covariance_after_top10.csv")
 
 # =============================================================================
