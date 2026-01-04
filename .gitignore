@@ -7,3 +7,4 @@ __pycache__
 *.png
 *.txt
 SECTION2_DomainRecommender/results/svd_predictions.npy
+.env
