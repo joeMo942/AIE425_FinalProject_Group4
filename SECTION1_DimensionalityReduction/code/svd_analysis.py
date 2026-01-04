@@ -2044,7 +2044,7 @@ def visualize_latent_space(U, V, sigma, user_ids, item_ids, ratings_matrix):
     
     plt.tight_layout()
     
-    plot_path = os.path.join(PLOTS_DIR, 'latent_space_visualization.png')
+    plot_path = os.path.join(PLOTS_DIR, 'SVD_latent_space_visualization.png')
     plt.savefig(plot_path, dpi=150, bbox_inches='tight')
     print(f"        [SAVED] {plot_path}")
     plt.close()
