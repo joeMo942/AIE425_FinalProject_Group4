@@ -5,6 +5,6 @@ __pycache__
 *.pkl
 *.zip
 *.png
-*.txt
+#*.txt
 SECTION2_DomainRecommender/results/svd_predictions.npy
 .env
