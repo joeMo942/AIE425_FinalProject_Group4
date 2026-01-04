@@ -1,53 +1,58 @@
-SVD vs Collaborative Filtering Comparison
-==================================================
+SVD vs Collaborative Filtering (Clustering) Comparison
+============================================================
 
 Method Comparison:
-  SVD (Truncated) MAE: 0.5798
-  Assignment 1 CF MAE: 0.0667
-  Winner: CF (768.7% better)
+----------------------------------------
+  Method                    MAE        RMSE      
+----------------------------------------
+  SVD (Truncated)           0.5798     0.7223
+  CF Clustering             0.0667     0.0826
+----------------------------------------
 
-==================================================
+  Winner: CF Clustering (768.7% better MAE)
+
+============================================================
 Per-Prediction Details:
 
-  User 134471 x Item 1333:
-    SVD Prediction: 3.8017
-    CF Prediction: 3.4343
-    Actual Rating: 3.5455
-    SVD Error: 0.2562
-    CF Error: 0.1111
+  User 134471 x Item 1333 (Cluster 0):
+    SVD Prediction: 3.8016
+    CF Prediction:  3.4343
+    Actual Rating:  3.5455
+    SVD Error:      0.2562
+    CF Error:       0.1111
 
-  User 134471 x Item 1162:
+  User 134471 x Item 1162 (Cluster 0):
     SVD Prediction: 3.5518
-    CF Prediction: 3.5455
-    Actual Rating: 3.5455
-    SVD Error: 0.0063
-    CF Error: 0.0000
+    CF Prediction:  3.5455
+    Actual Rating:  3.5455
+    SVD Error:      0.0063
+    CF Error:       0.0000
 
-  User 27768 x Item 1333:
-    SVD Prediction: 3.8554
-    CF Prediction: 3.3828
-    Actual Rating: 3.2560
-    SVD Error: 0.5994
-    CF Error: 0.1268
+  User 27768 x Item 1333 (Cluster 2):
+    SVD Prediction: 3.8553
+    CF Prediction:  3.3828
+    Actual Rating:  3.2560
+    SVD Error:      0.5994
+    CF Error:       0.1268
 
-  User 27768 x Item 1162:
+  User 27768 x Item 1162 (Cluster 2):
     SVD Prediction: 3.6399
-    CF Prediction: 3.3436
-    Actual Rating: 3.2560
-    SVD Error: 0.3839
-    CF Error: 0.0877
+    CF Prediction:  3.3436
+    Actual Rating:  3.2560
+    SVD Error:      0.3839
+    CF Error:       0.0877
 
-  User 16157 x Item 1333:
+  User 16157 x Item 1333 (Cluster 2):
     SVD Prediction: 4.3928
-    CF Prediction: 3.1648
-    Actual Rating: 3.0958
-    SVD Error: 1.2970
-    CF Error: 0.0690
+    CF Prediction:  3.1648
+    Actual Rating:  3.0958
+    SVD Error:      1.2970
+    CF Error:       0.0690
 
-  User 16157 x Item 1162:
+  User 16157 x Item 1162 (Cluster 2):
     SVD Prediction: 4.0319
-    CF Prediction: 3.0899
-    Actual Rating: 3.0958
-    SVD Error: 0.9360
-    CF Error: 0.0059
+    CF Prediction:  3.0899
+    Actual Rating:  3.0958
+    SVD Error:      0.9360
+    CF Error:       0.0059
 
