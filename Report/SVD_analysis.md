@@ -148,6 +148,16 @@ raw_pred = np.dot(u_vector * sigma, v_vector) + global_mean
 predicted = np.clip(raw_pred, 1.0, 5.0)
 ```
 
+**LaTeX:**
+$$\hat{r}_{u,i} = \mu + \sum_{k=1}^{K} u_{u,k} \cdot \sigma_k \cdot v_{i,k}$$
+
+**Where:**
+- $\hat{r}_{u,i}$ = predicted rating for user $u$ on item $i$
+- $\mu$ = global mean rating
+- $u_{u,k}$ = user $u$'s latent factor $k$
+- $\sigma_k$ = singular value for factor $k$
+- $v_{i,k}$ = item $i$'s latent factor $k$
+
 ---
 
 ## Section 5: SVD vs PCA Comparison
