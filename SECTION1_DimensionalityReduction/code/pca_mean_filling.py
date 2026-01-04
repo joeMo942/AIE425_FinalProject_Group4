@@ -255,6 +255,28 @@ top10_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_top10_eigenvalue
 print("[Saved] meanfill_top10_eigenvalues.csv")
 
 # =============================================================================
+# Visualization 1: Top-10 Eigenvalues Bar Chart
+# =============================================================================
+import matplotlib.pyplot as plt
+
+print("\n[Creating Eigenvalues Bar Chart...]")
+fig, ax = plt.subplots(figsize=(8, 5))
+
+pcs = [f'PC{i+1}' for i in range(10)]
+top10_eig = eigenvalues[:10]
+
+ax.bar(pcs, top10_eig, color='steelblue', alpha=0.8)
+ax.set_xlabel('Principal Component', fontsize=12)
+ax.set_ylabel('Eigenvalue', fontsize=12)
+ax.set_title('Mean-Fill PCA: Top 10 Eigenvalues', fontsize=14)
+
+plt.tight_layout()
+plt.savefig(os.path.join(PLOTS_DIR, 'meanfill_eigenvalues.png'), dpi=150, bbox_inches='tight')
+plt.close()
+print("[Saved] meanfill_eigenvalues.png")
+
+
+# =============================================================================
 # Covariance Matrix: Before vs After Reduction
 # =============================================================================
 
@@ -461,3 +483,78 @@ for result in prediction_results:
 print("\n" + "="*70)
 print("[SUCCESS] All steps completed! (Steps 1-11)")
 print("="*70)
+
+# =============================================================================
+# Visualization 2: Prediction Error Comparison Bar Chart
+# =============================================================================
+print("\n[Creating Prediction Error Comparison Chart...]")
+
+# Prepare data for visualization
+top5_results = [r for r in prediction_results if r['PCs'] == 5]
+top10_results = [r for r in prediction_results if r['PCs'] == 10]
+
+labels = [f"{r['Target_User']}-{r['Target_Item']}" for r in top5_results]
+top5_errors = [r['Error'] for r in top5_results]
+top10_errors = [r['Error'] for r in top10_results]
+
+x = np.arange(len(labels))
+width = 0.35
+
+fig, ax = plt.subplots(figsize=(10, 6))
+bars1 = ax.bar(x - width/2, top5_errors, width, label='Top-5 PCs', color='coral', alpha=0.8)
+bars2 = ax.bar(x + width/2, top10_errors, width, label='Top-10 PCs', color='teal', alpha=0.8)
+
+ax.set_xlabel('User-Item Pair', fontsize=12)
+ax.set_ylabel('Absolute Error', fontsize=12)
+ax.set_title('Mean-Fill PCA: Prediction Error Comparison (Top-5 vs Top-10 PCs)', fontsize=14)
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+ax.legend()
+
+# Add value labels on bars
+for bar in bars1:
+    height = bar.get_height()
+    ax.annotate(f'{height:.2f}', xy=(bar.get_x() + bar.get_width()/2, height),
+                xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=9)
+for bar in bars2:
+    height = bar.get_height()
+    ax.annotate(f'{height:.2f}', xy=(bar.get_x() + bar.get_width()/2, height),
+                xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=9)
+
+fig.tight_layout()
+plt.savefig(os.path.join(PLOTS_DIR, 'meanfill_error_comparison.png'), dpi=150, bbox_inches='tight')
+plt.close()
+print("[Saved] meanfill_error_comparison.png")
+
+# =============================================================================
+# Visualization 3: Average Error Bar Chart (Top-5 vs Top-10)
+# =============================================================================
+print("\n[Creating Average Error Bar Chart...]")
+
+fig, ax = plt.subplots(figsize=(6, 5))
+
+# Calculate average errors
+avg_top5 = sum(top5_errors) / len(top5_errors)
+avg_top10 = sum(top10_errors) / len(top10_errors)
+
+methods = ['Top-5 PCs', 'Top-10 PCs']
+avg_errors = [avg_top5, avg_top10]
+colors = ['coral', 'teal']
+
+bars = ax.bar(methods, avg_errors, color=colors, alpha=0.8)
+ax.set_ylabel('Average Error', fontsize=12)
+ax.set_title('Mean-Fill PCA: Average Prediction Error', fontsize=14)
+
+# Add value labels
+for bar in bars:
+    height = bar.get_height()
+    ax.annotate(f'{height:.3f}', xy=(bar.get_x() + bar.get_width()/2, height),
+                xytext=(0, 3), textcoords="offset points", ha='center', fontsize=11)
+
+plt.tight_layout()
+plt.savefig(os.path.join(PLOTS_DIR, 'meanfill_avg_error.png'), dpi=150, bbox_inches='tight')
+plt.close()
+print("[Saved] meanfill_avg_error.png")
+
+print("\n[All visualizations saved to plots folder!]")
+
