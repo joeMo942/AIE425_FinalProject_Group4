@@ -25,6 +25,12 @@ import random
 from typing import Dict, Optional, List
 
 try:
+    import undetected_chromedriver as uc
+    UNDETECTED_AVAILABLE = True
+except ImportError:
+    UNDETECTED_AVAILABLE = False
+    
+try:
     from selenium import webdriver
     from selenium.webdriver.chrome.options import Options
     from selenium.webdriver.common.by import By
@@ -45,11 +51,11 @@ CHECKPOINT_FILE = DATA_DIR / "scraper_checkpoint.json"
 FAILED_FILE = DATA_DIR / "failed_streamers.txt"
 STREAMERS_FILE = DATA_DIR / "top_2000_streamers.txt"  # Use top 2000 for faster scraping
 
-# Scraping settings
-REQUEST_DELAY_MIN = 2.0  # Minimum seconds between requests
-REQUEST_DELAY_MAX = 4.0  # Maximum seconds between requests
-PAGE_TIMEOUT = 20  # Seconds to wait for page load
-CHECKPOINT_INTERVAL = 100  # Save checkpoint every N streamers
+# Scraping settings - increased delays for Cloudflare bypass
+REQUEST_DELAY_MIN = 5.0  # Minimum seconds between requests
+REQUEST_DELAY_MAX = 8.0  # Maximum seconds between requests
+PAGE_TIMEOUT = 30  # Seconds to wait for page load
+CHECKPOINT_INTERVAL = 50  # Save checkpoint every N streamers
 
 # Setup logging
 logging.basicConfig(
@@ -60,35 +66,96 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def create_driver() -> webdriver.Chrome:
-    """Create a headless Chrome WebDriver with anti-detection measures."""
-    options = Options()
+def create_driver(headless: bool = True):
+    """
+    Create a Chrome WebDriver using undetected-chromedriver to bypass Cloudflare.
     
-    # Anti-detection measures
-    options.add_argument("--headless=new")
+    undetected-chromedriver patches Chrome to avoid bot detection.
+    """
+    if not UNDETECTED_AVAILABLE:
+        print("[ERROR] undetected-chromedriver not installed. Run: pip install undetected-chromedriver")
+        return None
+    
+    options = uc.ChromeOptions()
+    
+    if headless:
+        options.add_argument("--headless=new")
+    
     options.add_argument("--no-sandbox")
     options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--disable-gpu")
     options.add_argument("--window-size=1920,1080")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-infobars")
-    options.add_argument("--disable-extensions")
     
-    # Realistic user agent
-    options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-    
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-    
-    driver = webdriver.Chrome(options=options)
-    
-    # Additional anti-detection
-    driver.execute_cdp_cmd('Network.setUserAgentOverride', {
-        "userAgent": 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    })
+    # Create undetected Chrome driver (specify version to match installed Chrome)
+    driver = uc.Chrome(options=options, use_subprocess=True, version_main=142)
     
     driver.set_page_load_timeout(PAGE_TIMEOUT)
     return driver
+
+
+def login_to_twitchtracker(driver: webdriver.Chrome, wait_for_manual: bool = True) -> bool:
+    """
+    Login to TwitchTracker using Twitch OAuth.
+    This bypasses Cloudflare verification by having authenticated session.
+    
+    Args:
+        driver: Selenium WebDriver
+        wait_for_manual: If True, waits for user to manually complete OAuth
+    
+    Returns:
+        True if login successful
+    """
+    print("[LOGIN] Navigating to TwitchTracker login...")
+    
+    try:
+        # Go to TwitchTracker homepage
+        driver.get("https://twitchtracker.com/")
+        time.sleep(2)
+        
+        # Look for login/sign in button
+        try:
+            # Click "Login with Twitch" or similar button
+            login_buttons = driver.find_elements("xpath", 
+                "//*[contains(text(), 'Sign in') or contains(text(), 'Login') or contains(text(), 'Twitch')]"
+            )
+            
+            for btn in login_buttons:
+                if 'twitch' in btn.text.lower() or 'login' in btn.text.lower() or 'sign' in btn.text.lower():
+                    btn.click()
+                    print("[LOGIN] Clicked login button")
+                    time.sleep(3)
+                    break
+        except Exception as e:
+            print(f"[LOGIN] Could not find login button: {e}")
+        
+        # Check if we're on Twitch OAuth page
+        if "twitch.tv" in driver.current_url:
+            print("[LOGIN] On Twitch OAuth page...")
+            
+            if wait_for_manual:
+                print("[LOGIN] Please complete Twitch login manually in the browser window...")
+                print("[LOGIN] Waiting up to 60 seconds for login completion...")
+                
+                # Wait for redirect back to TwitchTracker
+                for _ in range(60):
+                    time.sleep(1)
+                    if "twitchtracker.com" in driver.current_url:
+                        print("[LOGIN] Redirected back to TwitchTracker!")
+                        break
+        
+        # Verify login by checking for logged-in elements
+        time.sleep(2)
+        page_source = driver.page_source.lower()
+        
+        if 'logout' in page_source or 'profile' in page_source or 'dashboard' in page_source:
+            print("[LOGIN] Successfully logged in!")
+            return True
+        else:
+            print("[LOGIN] Login status unclear - proceeding anyway")
+            return True  # Proceed even if unsure
+            
+    except Exception as e:
+        print(f"[LOGIN] Error during login: {e}")
+        return False
 
 
 def extract_number(text: str) -> Optional[int]:
@@ -126,44 +193,52 @@ def fetch_games_from_games_page(driver: webdriver.Chrome, username: str) -> list
     
     try:
         driver.get(url)
-        time.sleep(random.uniform(1.5, 2.5))  # Shorter delay for subpage
+        time.sleep(random.uniform(5.0, 8.0))  # Same delay as main page for Cloudflare
         
         # Check for Cloudflare or error
         if "Just a moment" in driver.page_source or "Page not found" in driver.page_source:
             return []
         
         # Extract game names from the games table
-        js_script = """
+        js_script = r"""
         return (function() {
             const games = [];
             
-            // Method 1: Look for table rows with game names
-            const rows = document.querySelectorAll('table tr, .game-row, [class*="game"]');
-            rows.forEach(row => {
-                const links = row.querySelectorAll('a');
-                links.forEach(link => {
-                    const text = link.textContent.trim();
-                    if (text && text.length > 2 && !text.includes('Game') && 
-                        !text.includes('Hours') && !text.includes('%') && 
+            // Target the games table specifically
+            // Look for links that point to a game page AND have text content
+            const gameLinks = document.querySelectorAll('table a[href*="/games/"]');
+            
+            if (gameLinks.length > 0) {
+                gameLinks.forEach(link => {
+                    // Get direct text content, ignoring hidden tooltips/images if possible
+                    // CLEAN: remove newlines, tabs, and potential stat suffixes
+                    let text = link.textContent.replace(/[\n\t\r]/g, ' ').trim();
+                    
+                    // Filter out stats and generic links
+                    if (text && text.length > 2 && 
+                        !['Games', 'More', 'All', 'View', 'Console'].includes(text) && 
+                        !text.includes('%') && 
+                        !text.match(/^\d+/) && // Starts with number (e.g. 1.2K)
+                        !text.includes(' hrs') && 
                         !games.includes(text)) {
                         games.push(text);
                     }
                 });
-            });
-            
-            // Method 2: Find all links containing /games/ in href
-            if (games.length === 0) {
+            } else {
+                // Fallback: any link with /games/ in href (e.g. valid game cards)
                 const allLinks = document.querySelectorAll('a[href*="/games/"]');
                 allLinks.forEach(link => {
-                    const text = link.textContent.trim();
-                    if (text && text.length > 2 && !['Games', 'More', 'All'].includes(text) && 
+                    let text = link.textContent.replace(/[\n\t\r]/g, ' ').trim();
+                    if (text && text.length > 2 && 
+                        !['Games', 'More', 'All'].includes(text) && 
+                        !text.match(/^\d+/) && 
                         !games.includes(text)) {
                         games.push(text);
                     }
                 });
             }
             
-            return games.slice(0, 5);  // Top 5 games
+            return games.slice(0, 10);  // Get top 10 to be safe
         })();
         """
         
@@ -178,159 +253,218 @@ def fetch_games_from_games_page(driver: webdriver.Chrome, username: str) -> list
 def scrape_streamer(driver: webdriver.Chrome, username: str) -> Optional[Dict]:
     """
     Scrape metadata for a single streamer from TwitchTracker.
-    Uses JavaScript execution for reliable DOM extraction.
-    
-    Returns dict with streamer info or None if failed.
+    Extracts ALL fields matching datasetV2.csv format:
+    - RANK, NAME, LANGUAGE, TYPE
+    - MOST_STREAMED_GAME, 2ND_MOST_STREAMED_GAME
+    - AVERAGE_STREAM_DURATION, FOLLOWERS_GAINED_PER_STREAM
+    - AVG_VIEWERS_PER_STREAM, AVG_GAMES_PER_STREAM
+    - TOTAL_TIME_STREAMED, TOTAL_FOLLOWERS, TOTAL_VIEWS
+    - TOTAL_GAMES_STREAMED, ACTIVE_DAYS_PER_WEEK
+    - MOST_ACTIVE_DAY, DAY_WITH_MOST_FOLLOWERS_GAINED
     """
     url = f"https://twitchtracker.com/{username}"
     
     try:
         driver.get(url)
-        
-        # Wait for page to load
         time.sleep(random.uniform(REQUEST_DELAY_MIN, REQUEST_DELAY_MAX))
         
-        # Check for 404 or error page
         if "Page not found" in driver.page_source or "404" in driver.title:
             return None
         
-        # Use JavaScript to extract data from the DOM
+        # Comprehensive JavaScript extraction
         js_script = """
         return (function() {
             const result = {
-                bio: '',
-                language: '',
                 rank: null,
+                language: '',
+                type: '',
+                avg_stream_duration: null,
+                followers_gained_per_stream: null,
                 avg_viewers: null,
-                followers: null,
-                hours_streamed: null,
-                peak_viewers: null,
+                avg_games_per_stream: null,
+                total_time_streamed: null,
+                total_followers: null,
+                total_views: null,
+                total_games_streamed: null,
+                active_days_per_week: null,
+                most_active_day: '',
+                day_most_followers: '',
                 games: []
             };
             
-            // Extract bio - text before Twitch link
+            const pageText = document.body.innerText;
+            
+            // Extract rank
             try {
-                const twitchLink = document.querySelector('a[href*="twitch.tv"]');
-                if (twitchLink && twitchLink.parentElement) {
-                    const bio = twitchLink.parentElement.previousElementSibling;
-                    if (bio && bio.textContent) {
-                        result.bio = bio.textContent.trim();
-                    }
-                }
+                const rankMatch = pageText.match(/Ranked\\s*#?\\s*([\\d,]+)/i);
+                if (rankMatch) result.rank = parseInt(rankMatch[1].replace(/,/g, ''));
             } catch(e) {}
             
             // Extract language
             try {
                 const langLink = document.querySelector('a[href*="/languages/"]');
-                if (langLink) {
-                    result.language = langLink.textContent.trim();
-                }
+                if (langLink) result.language = langLink.textContent.trim();
             } catch(e) {}
             
-            // Extract rank - using text content search
+            // Extract type (personality, gaming, etc.) - from category badges or text
             try {
-                const rankMatch = document.body.innerText.match(/Ranked\\s*#?\\s*(\\d+)/i);
-                if (rankMatch) {
-                    result.rank = parseInt(rankMatch[1]);
-                }
+                const typeMatch = pageText.match(/Type[:\\s]+(\\w+)/i);
+                if (typeMatch) result.type = typeMatch[1];
+                // Also check for common types in page
+                if (pageText.includes('personality')) result.type = 'personality';
+                else if (pageText.includes('Just Chatting')) result.type = 'personality';
             } catch(e) {}
             
-            // Extract stats by finding labels and their sibling values
+            // Parse statistics from the stats grid/panels
+            // TwitchTracker displays stats in labeled divs
             try {
-                const allDivs = document.querySelectorAll('div');
-                allDivs.forEach(div => {
-                    const text = div.textContent.trim();
-                    const next = div.nextElementSibling;
-                    if (next) {
-                        const nextText = next.textContent.trim().replace(/[,●]/g, '');
-                        const num = parseInt(nextText);
+                // Method 1: Find g-data divs (common pattern)
+                const statDivs = document.querySelectorAll('.g-data, [class*="stat"], .panel-stat');
+                statDivs.forEach(div => {
+                    const label = div.querySelector('label, .label, small');
+                    const value = div.querySelector('span, .value, strong');
+                    if (label && value) {
+                        const labelText = label.textContent.toLowerCase().trim();
+                        const valueText = value.textContent.trim().replace(/[,]/g, '');
+                        const numValue = parseFloat(valueText);
                         
-                        if (text === 'Followers' && !isNaN(num)) {
-                            result.followers = num;
-                        }
-                        if (text === 'Avg viewers' && !isNaN(num)) {
-                            result.avg_viewers = num;
-                        }
+                        if (labelText.includes('average stream')) result.avg_stream_duration = numValue;
+                        if (labelText.includes('followers gained')) result.followers_gained_per_stream = numValue;
+                        if (labelText.includes('avg viewers') || labelText.includes('average viewers')) result.avg_viewers = numValue;
+                        if (labelText.includes('games per stream')) result.avg_games_per_stream = numValue;
+                        if (labelText.includes('active days')) result.active_days_per_week = numValue;
                     }
                 });
             } catch(e) {}
             
-            // Extract hours streamed from page text
+            // Method 2: Parse from page text using regex patterns
             try {
-                const hoursMatch = document.body.innerText.match(/(\\d[\\d,]*)\\s*(?:total\\s*)?hours?\\s*streamed/i);
-                if (hoursMatch) {
-                    result.hours_streamed = parseInt(hoursMatch[1].replace(/,/g, ''));
+                // Total time streamed (hours)
+                const hoursMatch = pageText.match(/([\\d,]+)\\s*(?:total\\s*)?hours?\\s*(?:streamed|live)/i);
+                if (hoursMatch) result.total_time_streamed = parseInt(hoursMatch[1].replace(/,/g, ''));
+                
+                // Total followers
+                const followersMatch = pageText.match(/([\\d,]+(?:\\.\\d+)?[KMB]?)\\s*(?:total\\s*)?followers/i);
+                if (followersMatch) {
+                    let val = followersMatch[1].replace(/,/g, '');
+                    if (val.includes('K')) result.total_followers = parseFloat(val) * 1000;
+                    else if (val.includes('M')) result.total_followers = parseFloat(val) * 1000000;
+                    else result.total_followers = parseInt(val);
                 }
+                
+                // Total views
+                const viewsMatch = pageText.match(/([\\d,]+(?:\\.\\d+)?[KMB]?)\\s*(?:total\\s*)?views/i);
+                if (viewsMatch) {
+                    let val = viewsMatch[1].replace(/,/g, '');
+                    if (val.includes('K')) result.total_views = parseFloat(val) * 1000;
+                    else if (val.includes('M')) result.total_views = parseFloat(val) * 1000000;
+                    else result.total_views = parseInt(val);
+                }
+                
+                // Games streamed count
+                const gamesMatch = pageText.match(/([\\d,]+)\\s*(?:total\\s*)?games?\\s*(?:streamed|played)/i);
+                if (gamesMatch) result.total_games_streamed = parseInt(gamesMatch[1].replace(/,/g, ''));
+                
+                // Average viewers (backup)
+                if (!result.avg_viewers) {
+                    const avgMatch = pageText.match(/([\\d,]+)\\s*average\\s*viewers/i);
+                    if (avgMatch) result.avg_viewers = parseInt(avgMatch[1].replace(/,/g, ''));
+                }
+                
+                // Days of week detection
+                const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+                days.forEach(day => {
+                    if (pageText.includes('most active') && pageText.includes(day)) {
+                        result.most_active_day = day;
+                    }
+                });
             } catch(e) {}
             
-            // Extract peak viewers
+            // Extract games from data-original-title on images
+            // Extract games from images or links
             try {
-                const peakMatch = document.body.innerText.match(/peak\\s*viewers?[\\s:]*([\\d,]+)/i);
-                if (peakMatch) {
-                    result.peak_viewers = parseInt(peakMatch[1].replace(/,/g, ''));
-                }
-            } catch(e) {}
-            
-            // Extract game names from the games section or page text
-            try {
-                // Method 1: Get game names from data-original-title attribute on images
-                const gameImages = document.querySelectorAll('#channel-games img, .game-image img, [class*="game"] img');
+                // Method 1: ID-based (main page often has #channel-games)
+                const gameImages = document.querySelectorAll('#channel-games img, [class*="game"] img, .img-game');
                 gameImages.forEach(img => {
-                    const title = img.getAttribute('data-original-title') || img.getAttribute('title') || img.getAttribute('alt');
+                    const title = img.getAttribute('data-original-title') || img.getAttribute('title') || img.alt || '';
                     if (title && title.length > 1 && !result.games.includes(title)) {
                         result.games.push(title);
                     }
-                });
-                
-                // Method 2: Look for data-original-title on any element in games section
-                const gamesSection = document.querySelectorAll('#channel-games [data-original-title], [class*="game"] [data-original-title]');
-                gamesSection.forEach(elem => {
-                    const title = elem.getAttribute('data-original-title');
-                    if (title && title.length > 1 && !result.games.includes(title)) {
-                        result.games.push(title);
-                    }
-                });
-                
-                // Method 3: Get game links with title attribute
-                const gameLinks = document.querySelectorAll('#channel-games a.entity, a[href*="/games/"]');
-                gameLinks.forEach(link => {
-                    const title = link.getAttribute('title') || link.getAttribute('data-original-title');
-                    // Also check child images
-                    const img = link.querySelector('img');
-                    const imgTitle = img ? (img.getAttribute('data-original-title') || img.getAttribute('title') || img.getAttribute('alt')) : null;
-                    const gameName = title || imgTitle;
-                    if (gameName && gameName.length > 1 && !['Games', 'More', 'All'].includes(gameName)) {
-                        if (!result.games.includes(gameName)) {
-                            result.games.push(gameName);
+                    // Check parent link title/text if image has no title
+                    else if (img.parentElement && img.parentElement.tagName === 'A') {
+                        let parentTitle = img.parentElement.getAttribute('title') || img.parentElement.textContent.replace(/[\n\t\r]/g, ' ').trim();
+                        if (parentTitle && parentTitle.length > 1 && 
+                            !parentTitle.match(/^\d+/) && // Avoid starting with number
+                            !parentTitle.includes(' hrs') &&
+                            !parentTitle.includes('%') &&
+                            !result.games.includes(parentTitle)) {
+                            result.games.push(parentTitle);
                         }
                     }
                 });
-            } catch(e) {}
+                
+                // Method 2: Link-based (common on subpages)
+                if (result.games.length === 0) {
+                    const gameLinks = document.querySelectorAll('a[href*="/games/"]');
+                    gameLinks.forEach(link => {
+                        const title = link.getAttribute('title') || link.textContent.replace(/[\n\t\r]/g, ' ').trim();
+                        // Check child image
+                        const img = link.querySelector('img');
+                        const imgTitle = img ? (img.getAttribute('title') || img.getAttribute('alt')) : '';
+                        
+                        const finalTitle = title || imgTitle;
+                        
+                        if (finalTitle && finalTitle.length > 2 && 
+                            !['Games', 'More', 'All', 'View'].includes(finalTitle) && 
+                            !finalTitle.match(/^\d+/) &&
+                            !result.games.includes(finalTitle)) {
+                            result.games.push(finalTitle);
+                        }
+                    });
+                }
+            } catch(e) { console.error("Error extracting games:", e); }
             
             return result;
         })();
         """
         
         data = driver.execute_script(js_script)
-        
-        # Build initial result from main page
+        if not data:
+            print(f"[WARNING] JS returned no data for {username}")
+            return None
+            
+        # Get games list - always fetch from /games page for reliability
         games_list = data.get('games', [])
         
-        # If no games found on main page, try the /games subpage
-        if not games_list:
-            games_list = fetch_games_from_games_page(driver, username)
+        # Always check /games page to get better game data
+        print(f"[INFO] Navigating to games page for {username}...")
+        games_from_page = fetch_games_from_games_page(driver, username)
+        if games_from_page:
+            # Merge: prefer games page data, then main page
+            for game in games_from_page:
+                if game not in games_list:
+                    games_list.insert(0, game)
+        games_list = games_list[:5]  # Keep top 5
         
+        # Build result matching datasetV2.csv columns
         result = {
-            'streamer_username': username,
-            'bio': data.get('bio', '')[:500] if data.get('bio') else '',
-            'language': data.get('language', ''),
-            'rank': data.get('rank'),
-            'avg_viewers': data.get('avg_viewers'),
-            'followers': data.get('followers'),
-            'hours_streamed': data.get('hours_streamed'),
-            'peak_viewers': data.get('peak_viewers'),
-            '1st_game': games_list[0] if len(games_list) > 0 else '',
-            '2nd_game': games_list[1] if len(games_list) > 1 else '',
+            'RANK': data.get('rank'),
+            'NAME': username,
+            'LANGUAGE': data.get('language', ''),
+            'TYPE': data.get('type', 'personality'),
+            'MOST_STREAMED_GAME': games_list[0] if len(games_list) > 0 else '',
+            '2ND_MOST_STREAMED_GAME': games_list[1] if len(games_list) > 1 else '',
+            'AVERAGE_STREAM_DURATION': data.get('avg_stream_duration'),
+            'FOLLOWERS_GAINED_PER_STREAM': data.get('followers_gained_per_stream'),
+            'AVG_VIEWERS_PER_STREAM': data.get('avg_viewers'),
+            'AVG_GAMES_PER_STREAM': data.get('avg_games_per_stream'),
+            'TOTAL_TIME_STREAMED': data.get('total_time_streamed'),
+            'TOTAL_FOLLOWERS': data.get('total_followers'),
+            'TOTAL_VIEWS': data.get('total_views'),
+            'TOTAL_GAMES_STREAMED': data.get('total_games_streamed'),
+            'ACTIVE_DAYS_PER_WEEK': data.get('active_days_per_week'),
+            'MOST_ACTIVE_DAY': data.get('most_active_day', ''),
+            'DAY_WITH_MOST_FOLLOWERS_GAINED': data.get('day_most_followers', ''),
         }
         
         return result
@@ -342,7 +476,8 @@ def scrape_streamer(driver: webdriver.Chrome, username: str) -> Optional[Dict]:
         logger.debug(f"WebDriver error for {username}: {str(e)[:50]}")
         return None
     except Exception as e:
-        logger.debug(f"Error scraping {username}: {str(e)[:50]}")
+        print(f"[ERROR] Error scraping {username}: {str(e)[:100]}")
+        # logger.debug(f"Error scraping {username}: {e}")
         return None
 
 
@@ -427,9 +562,19 @@ def main():
     success_count = 0
     
     try:
-        print("[INIT] Creating Chrome WebDriver...")
-        driver = create_driver()
+        print("[INIT] Creating Chrome WebDriver (GUI mode for debugging)...")
+        driver = create_driver(headless=False)  # GUI enabled per user request
+        
+        # SKIP LOGIN per user request
+        # print("[INIT] Logging into TwitchTracker...")
+        # login_to_twitchtracker(driver)
+        
+        print("[INIT] Starting scraping (TEST MODE: first 10)...")
         print("[INIT] WebDriver ready!\n")
+        
+        # Limit to 10 for testing
+        test_limit = 10
+        remaining = remaining[:test_limit]
         
         for i, username in enumerate(remaining):
             # Scrape
@@ -482,7 +627,7 @@ def main():
         print(f"\n[SAVED] {OUTPUT_FILE.name}")
         df = pd.DataFrame(results)
         print("\n       Sample data:")
-        print(df[['streamer_username', 'language', 'rank', 'avg_viewers', '1st_game']].head(5).to_string())
+        print(df[['NAME', 'LANGUAGE', 'RANK', 'AVG_VIEWERS_PER_STREAM', 'MOST_STREAMED_GAME']].head(5).to_string())
 
 
 if __name__ == "__main__":

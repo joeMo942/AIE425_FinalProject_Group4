@@ -5,3 +5,6 @@ __pycache__
 *.txt
 *.pkl
 *.png
+.env
+*.npy
+*.json

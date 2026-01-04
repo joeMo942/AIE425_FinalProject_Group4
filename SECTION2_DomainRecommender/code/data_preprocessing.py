@@ -102,45 +102,48 @@ def aggregate_interactions(df: pd.DataFrame) -> pd.DataFrame:
 
 def convert_to_ratings(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Convert total watch time to 1-5 ratings using USER-SPECIFIC MIN-MAX NORMALIZATION.
+    Convert total watch time to 1-5 ratings using LOG-TRANSFORMED MIN-MAX NORMALIZATION.
     
     Logic:
-    1. For each user, find their min and max watch time.
-    2. Normalize watch time to 0-1 scale: (x - min) / (max - min)
-    3. Map normalized score to 1-5 rating bins.
+    1. Apply log1p(total_minutes) to compress long-tail distribution.
+    2. For each user, find their min and max LOG watch time.
+    3. Normalize to 0-1 scale: (log_x - log_min) / (log_max - log_min)
+    4. Map normalized score to 1-5 rating bins.
     
-    This ensures every user utilizes the full rating scale range relative to their own habits.
+    Rationale: Log transformation compresses outliers. A 30-minute session now maps 
+    closer to a 3/5 rating rather than 1/5 (when compared against 100-hour outliers).
+    This reflects moderate interest accurately.
     """
     print("\n" + "-" * 40)
-    print("Converting watch time to 1-5 ratings (User Min-Max)...")
+    print("Converting watch time to 1-5 ratings (Log + User Min-Max)...")
     
-    # Calculate min and max per user
-    user_stats = df.groupby('user_id')['total_minutes'].agg(['min', 'max']).reset_index()
-    user_stats.columns = ['user_id', 'user_min', 'user_max']
+    # Step 1: Apply log transformation to compress long-tail
+    df['log_minutes'] = np.log1p(df['total_minutes'])  # log(1 + x)
     
-    df = df.merge(user_stats, on='user_id', how='left')
+    print(f"       Log transformation applied: log1p(total_minutes)")
+    print(f"       Log range: {df['log_minutes'].min():.2f} - {df['log_minutes'].max():.2f}")
     
-    # Calculate range
-    df['user_range'] = df['user_max'] - df['user_min']
+    # Step 2: Calculate min and max LOG values per user
+    df['user_log_min'] = df.groupby('user_id')['log_minutes'].transform('min')
+    df['user_log_max'] = df.groupby('user_id')['log_minutes'].transform('max')
+    df['user_log_range'] = df['user_log_max'] - df['user_log_min']
     
-    # Handle users with single interaction or 0 range (assign rating 3 or 5)
-    # If range is 0, it means all interactions have same duration. 
-    # We'll assign rating 4 (Above Average) for these cases (arbitrary but reasonable).
+    # Step 3: Normalize LOG values to 0-1 scale
+    # Handle users with single interaction or 0 range (assign rating 4)
     df['normalized'] = 0.75  # Default for zero range
     
-    mask_range = df['user_range'] > 0
+    mask_range = df['user_log_range'] > 0
     df.loc[mask_range, 'normalized'] = (
-        (df.loc[mask_range, 'total_minutes'] - df.loc[mask_range, 'user_min']) / 
-        df.loc[mask_range, 'user_range']
+        (df.loc[mask_range, 'log_minutes'] - df.loc[mask_range, 'user_log_min']) / 
+        df.loc[mask_range, 'user_log_range']
     )
     
-    # Map normalized score (0-1) to ratings 1-5
+    # Step 4: Map normalized score (0-1) to ratings 1-5
     # 0.0 - 0.2 → 1
     # 0.2 - 0.4 → 2
     # 0.4 - 0.6 → 3
     # 0.6 - 0.8 → 4
     # 0.8 - 1.0 → 5
-    # usage of pd.cut for clean binning
     df['rating'] = pd.cut(
         df['normalized'],
         bins=[0, 0.2, 0.4, 0.6, 0.8, 1.0],
@@ -149,11 +152,12 @@ def convert_to_ratings(df: pd.DataFrame) -> pd.DataFrame:
     ).astype(int)
     
     # Drop temp columns
-    df = df.drop(columns=['user_min', 'user_max', 'user_range', 'normalized'])
+    df = df.drop(columns=['log_minutes', 'user_log_min', 'user_log_max', 
+                          'user_log_range', 'normalized'])
     
     # Print distribution
     rating_dist = df['rating'].value_counts().sort_index()
-    print("\n       Rating Distribution:")
+    print("\n       Rating Distribution (after log normalization):")
     for rating, count in rating_dist.items():
         pct = 100 * count / len(df)
         bar = "█" * int(pct / 2)
