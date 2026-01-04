@@ -8,7 +8,7 @@ RESULTS_DIR = os.path.join(CODE_DIR, '..', 'results')
 PLOTS_DIR = os.path.join(CODE_DIR, '..', 'plots')
 
 # =============================================================================
-# Step 1: Load r_u (user average ratings) and r_i (item average ratings)
+# Step 0: Data Loading (Preparation)
 # =============================================================================
 
 from utils import (get_user_avg_ratings, get_item_avg_ratings, 
@@ -32,7 +32,7 @@ print(f"Shape: {r_i.shape}")
 
 
 # =============================================================================
-# Step 2: Load target users and target items
+# Step 0 (continued): Load target users and target items
 # =============================================================================
 
 # Load target users
@@ -48,7 +48,7 @@ print(target_items)
 
 
 # =============================================================================
-# Step 3: Mean-Filling Method - Replace missing ratings with column means
+# Step 1 & 2: Calculate average rating for I1/I2 + Mean-Filling Method
 # =============================================================================
 
 # Load the preprocessed dataset
@@ -97,11 +97,11 @@ print(rating_matrix_filled.head(10))
 
 
 # =============================================================================
-# Step 4: Calculate average rating for each item (using r_i)
+# Step 3: Calculate average rating for each item (using r_i)
 # =============================================================================
 
 print("\n" + "="*70)
-print("Step 4: Calculate Average Rating for Each Item")
+print("Step 3: Calculate Average Rating for Each Item")
 print("="*70)
 
 # We already have r_i loaded, which contains item means
@@ -114,11 +114,11 @@ for i, item_id in enumerate(target_items, 1):
 
 
 # =============================================================================
-# Step 5: Calculate centered ratings (actual - mean) for ALL items
+# Step 4: Calculate centered ratings (actual - mean) for ALL items
 # =============================================================================
 
 print("\n" + "="*70)
-print("Step 5: Calculate Centered Ratings (actual - mean) for ALL Items")
+print("Step 4: Calculate Centered Ratings (actual - mean) for ALL Items")
 print("="*70)
 
 from utils import compute_centered_ratings
@@ -136,11 +136,11 @@ print(df_centered_targets.head(10))
 
 
 
-# Step 6: Compute Covariance Matrix for ALL Items (Memory-Efficient)
+# Step 5 & 6: Compute Covariance Matrix for ALL Items (Memory-Efficient)
 # =============================================================================
 
 print("\n" + "="*70)
-print("Step 6: Compute Covariance Matrix for ALL Items")
+print("Step 5 & 6: Compute Covariance Matrix for ALL Items")
 print("="*70)
 
 from utils import compute_covariance_matrix_efficient
@@ -177,8 +177,8 @@ print("\n--- Sample of Covariance Matrix (first 5x5) ---")
 print(cov_matrix.iloc[:5, :5])
 
 # Save Step 6 results
-print("\n[Saving Step 6 results...]")
-cov_matrix.to_csv(os.path.join(RESULTS_DIR, 'step6_covariance_matrix.csv'))
+print("\n[Saving Step 5 & 6 results...]")
+cov_matrix.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_matrix.csv'))
 print(f"Saved full covariance matrix ({len(all_items)}x{len(all_items)}) to results folder.")
 
 # =============================================================================
@@ -236,48 +236,68 @@ print(f"Shape: {top10_eigenvectors.shape} (n_items x 10)")
 W_top5 = top5_eigenvectors
 W_top10 = top10_eigenvectors
 
-# --- Determine Top 5 and Top 10 Peers for Each Target Item ---
-print("\n--- Top Peers for Target Items (based on covariance) ---")
+# Save top 5 and top 10 eigenvalues
+print("\n[Saving eigenvalues...]")
+top5_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(5)],
+    'Eigenvalue': eigenvalues[:5],
+    'Variance_Explained_Pct': (eigenvalues[:5] / total_variance) * 100
+})
+top5_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_top5_eigenvalues.csv'), index=False)
+print("[Saved] meanfill_top5_eigenvalues.csv")
 
-# Find top peers for each target item
-top_peers_results = {}
-for i, item_id in enumerate(target_items, 1):
-    print(f"\n--- Target Item I{i} (Item {item_id}) ---")
-    
-    # Top 5 peers
-    top5 = get_top_peers(cov_matrix, item_id, 5)
-    print(f"\nTop 5 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top5.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-    
-    # Top 10 peers
-    top10 = get_top_peers(cov_matrix, item_id, 10)
-    print(f"\nTop 10 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top10.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-    
-    top_peers_results[f'I{i}'] = {
-        'item_id': item_id,
-        'top5_peers': top5.index.tolist(),
-        'top10_peers': top10.index.tolist()
-    }
+top10_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(10)],
+    'Eigenvalue': eigenvalues[:10],
+    'Variance_Explained_Pct': (eigenvalues[:10] / total_variance) * 100
+})
+top10_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_top10_eigenvalues.csv'), index=False)
+print("[Saved] meanfill_top10_eigenvalues.csv")
 
-# Save top peers for target items
-top_peers_data = []
-for i, item_id in enumerate(target_items, 1):
-    top10 = get_top_peers(cov_matrix, item_id, 10)
-    for rank, (peer_id, cov_val) in enumerate(top10.items(), 1):
-        top_peers_data.append({
-            'Target_Item': f'I{i}',
-            'Target_Item_ID': item_id,
-            'Rank': rank,
-            'Peer_Item_ID': peer_id,
-            'Covariance': cov_val,
-            'Is_Top5': rank <= 5
-        })
-top_peers_df = pd.DataFrame(top_peers_data)
-top_peers_df.to_csv(os.path.join(RESULTS_DIR, 'step7_target_item_peers.csv'), index=False)
-print("\nSaved top peers for I1 and I2 to results folder.")
+# =============================================================================
+# Covariance Matrix: Before vs After Reduction
+# =============================================================================
+
+print("\n" + "=" * 70)
+print("Covariance Matrix: Before vs After Reduction")
+print("=" * 70)
+
+# Before reduction: Original covariance matrix (FULL)
+print("\n--- BEFORE Reduction (Original Covariance Matrix) ---")
+# cov_matrix is already the full matrix
+print(f"Shape: {cov_matrix.shape}")
+
+# After reduction: Reconstructed covariance using Top-5 and Top-10 PCs
+# Reconstructed Σ ≈ W @ Λ @ W.T where Λ = diag(eigenvalues[:k])
+
+# Top-5 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-5 PCs)...")
+Lambda_5 = np.diag(eigenvalues[:5])
+cov_reconstructed_5 = W_top5 @ Lambda_5 @ W_top5.T
+cov_reconstructed_5_df = pd.DataFrame(cov_reconstructed_5, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_5_df.shape}")
+
+# Top-10 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-10 PCs)...")
+Lambda_10 = np.diag(eigenvalues[:10])
+cov_reconstructed_10 = W_top10 @ Lambda_10 @ W_top10.T
+cov_reconstructed_10_df = pd.DataFrame(cov_reconstructed_10, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_10_df.shape}")
+
+# Save covariance files separately (FULL MATRICES)
+print("\n[Saving FULL covariance matrices...]")
+
+# Before reduction
+cov_matrix.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_before_reduction.csv'))
+print("[Saved] meanfill_covariance_before_reduction.csv")
+
+# After Top-5 reduction
+cov_reconstructed_5_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_after_top5.csv'))
+print("[Saved] meanfill_covariance_after_top5.csv")
+
+# After Top-10 reduction
+cov_reconstructed_10_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_covariance_after_top10.csv'))
+print("[Saved] meanfill_covariance_after_top10.csv")
 
 # =============================================================================
 # Step 8 & 10: Project Users into Reduced Latent Space (Top-5 and Top-10)
@@ -421,7 +441,7 @@ for k_value, user_vectors, label in [(5, user_vectors_top5, "Top-5 PCs"),
 # Save prediction results
 print("\n[Saving Step 9 & 11 results...]")
 predictions_df = pd.DataFrame(prediction_results)
-predictions_df.to_csv(os.path.join(RESULTS_DIR, 'step9_11_predictions.csv'), index=False)
+predictions_df.to_csv(os.path.join(RESULTS_DIR, 'meanfill_predictions.csv'), index=False)
 print("Saved prediction results to results folder.")
 
 # Summary table

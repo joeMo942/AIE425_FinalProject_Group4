@@ -2,4 +2,8 @@ SECTION1_DimensionalityReduction/data/preprocessed_data.csv
 venv/
 *.csv
 __pycache__
-Assignment 1
+*.pkl
+*.zip
+*.png
+*.txt
+

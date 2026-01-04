@@ -16,41 +16,112 @@ This document provides a comprehensive analysis of the `pca_mean_filling.py` imp
 
 ## Implementation Steps
 
-### Step 1-2: Data Loading
+### Step 0: Data Loading (Preparation)
 - Loads user/item average ratings and target users/items
 - r_u shape: (147,914 x 2)
 - r_i shape: (11,123 x 2)
 
-### Step 3: Mean-Filling
-- Creates user-item matrix for target items
+### Step 1 & 2: Calculate Average + Mean-Filling
+- Calculates average rating for I1 and I2
+- Mean-fills missing ratings with item column mean
 - Missing values: 3,991 (49.08%)
-- Fills missing with item column mean
 - I1 mean: 3.69, I2 mean: 3.74
 
-### Step 4-5: Centered Ratings
+**Formula:**
+```
+μᵢ = (1/nᵢ) × Σ R_{u,i}  (for all users u who rated item i)
+
+R'_{u,i} = R_{u,i}  if observed
+R'_{u,i} = μᵢ      if missing
+```
+
+**LaTeX:**
+$$\mu_i = \frac{1}{n_i} \sum_{u} R_{u,i}$$
+
+$$R'_{u,i} = \begin{cases} R_{u,i} & \text{if observed} \\ \mu_i & \text{if missing} \end{cases}$$
+
+### Step 3: Average Rating for Each Item
+- Uses pre-computed item means from r_i
+
+### Step 4: Centered Ratings
 - Computes (rating - item_mean) for all 2,149,655 ratings
 
-### Step 6: Covariance Matrix
-- 11,123 x 11,123 matrix
+**Formula:**
+```
+Centered_{u,i} = R_{u,i} - μᵢ
+```
+
+**LaTeX:**
+$$Centered_{u,i} = R_{u,i} - \mu_i$$
+
+### Step 5 & 6: Covariance Matrix
+- Computes covariance for each two items
+- Generates 11,123 x 11,123 matrix
 - Memory-efficient: only users who rated BOTH items contribute
 - Divides by N-1 (sample covariance)
 
-### Step 7: PCA Eigendecomposition
+**Formula:**
+```
+Cov(i,j) = Σ (R_{u,i} - μᵢ)(R_{u,j} - μⱼ) / (N - 1)
+         for all users u who rated BOTH items i and j
+```
+
+**LaTeX:**
+$$Cov(i,j) = \frac{\sum_{u \in U_{i,j}} (R_{u,i} - \mu_i)(R_{u,j} - \mu_j)}{N - 1}$$
+
+### Step 7: PCA Eigendecomposition + Top Peers
 - Computes eigenvalues/eigenvectors
 - Top-5 PCs explain 1.37% variance
 - Top-10 PCs explain 2.30% variance
-- Identifies top peers for I1 and I2
+- Identifies top 5/10 peers for I1 and I2
+
+**Formula:**
+```
+Σ × W = W × Λ  (eigenvalue equation)
+
+Variance Explained = Σᵢ₌₁ᵏ λᵢ / Σᵢ₌₁ⁿ λᵢ × 100%
+
+Reconstructed Σ ≈ W × Λ × Wᵀ
+```
+
+**LaTeX:**
+$$\Sigma W = W \Lambda$$
+
+$$\text{Variance Explained} = \frac{\sum_{i=1}^{k} \lambda_i}{\sum_{i=1}^{n} \lambda_i} \times 100\%$$
+
+$$\hat{\Sigma} \approx W \Lambda W^T$$
 
 ### Step 8 & 10: User Projection
 - Projects users to 5D and 10D latent space
-- Formula: UserVector = CenteredRatings × W
+
+**Formula:**
+```
+t_{u,p} = Σⱼ (R_{u,j} - μⱼ) × W_{j,p}  (for all items j rated by user u)
+```
+
+**LaTeX:**
+$$t_{u,p} = \sum_{j \in Obs(u)} (R_{u,j} - \mu_j) \times W_{j,p}$$
 
 ### Step 9 & 11: Rating Prediction
 - Uses k-NN with cosine similarity in latent space
 - 20 nearest neighbors
 - Predicts ratings for target users on target items
 
+**Formula:**
+```
+cos(u, v) = (UserVector_u · UserVector_v) / (||UserVector_u|| × ||UserVector_v||)
+
+Predicted_{u,i} = μᵢ + Σᵥ (sim(u,v) × Centered_{v,i}) / Σᵥ |sim(u,v)|
+                 for v in k-nearest neighbors of u
+```
+
+**LaTeX:**
+$$cos(u,v) = \frac{\vec{U}_u \cdot \vec{U}_v}{||\vec{U}_u|| \times ||\vec{U}_v||}$$
+
+$$\hat{R}_{u,i} = \mu_i + \frac{\sum_{v \in N(u)} sim(u,v) \times (R_{v,i} - \mu_i)}{\sum_{v \in N(u)} |sim(u,v)|}$$
+
 ---
+
 
 ## Step 9 vs Step 11 Comparison
 

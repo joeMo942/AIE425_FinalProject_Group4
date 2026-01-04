@@ -10,7 +10,7 @@ CODE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(CODE_DIR, '..', 'results')
 
 # =============================================================================
-# Step 1: Load Data and Calculate Item Means
+# Phase 0: Data Loading & Item Mean Calculation
 # =============================================================================
 
 from utils import (get_user_avg_ratings, get_item_avg_ratings, 
@@ -50,11 +50,11 @@ for i, item_id in enumerate(target_items, 1):
     print(f"I{i} (Item {item_id}): μ = {item_means_dict[item_id]:.6f}")
 
 # =============================================================================
-# Phase 1: Compute MLE Covariance Matrix
+# Phase 1 (Point 1): Generate MLE Covariance Matrix
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 1: Compute MLE Covariance Matrix")
+print("Phase 1 (Point 1): Generate MLE Covariance Matrix")
 print("=" * 70)
 
 
@@ -86,11 +86,11 @@ print(f"Var(I2): {cov_matrix_mle.loc[target_items[1], target_items[1]]:.6f}")
 print(f"Cov(I1, I2): {cov_matrix_mle.loc[target_items[0], target_items[1]]:.6f}")
 
 # =============================================================================
-# Phase 2: Eigen Decomposition
+# Phase 2 (Point 2): Eigen Decomposition + Top Peers
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 2: Eigen Decomposition")
+print("Phase 2 (Point 2): Eigen Decomposition + Top Peers")
 print("=" * 70)
 
 # Convert to numpy array
@@ -124,44 +124,75 @@ W_top10 = eigenvectors[:, :10]
 print(f"\nProjection matrix W_5 shape: {W_top5.shape}")
 print(f"Projection matrix W_10 shape: {W_top10.shape}")
 
-# --- Top Peers for Target Items ---
-print("\n--- Top Peers for Target Items (based on MLE covariance) ---")
+# Save top 5 and top 10 eigenvalues
+print("\n[Saving eigenvalues...]")
+top5_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(5)],
+    'Eigenvalue': eigenvalues[:5],
+    'Variance_Explained_Pct': (eigenvalues[:5] / total_variance) * 100
+})
+top5_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'mle_top5_eigenvalues.csv'), index=False)
+print("[Saved] mle_top5_eigenvalues.csv")
 
-top_peers_data = []
-for i, item_id in enumerate(target_items, 1):
-    print(f"\n--- Target Item I{i} (Item {item_id}) ---")
-    
-    # Top 5 peers
-    top5 = get_top_peers(cov_matrix_mle, item_id, 5)
-    print(f"\nTop 5 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top5.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-    
-    # Top 10 peers
-    top10 = get_top_peers(cov_matrix_mle, item_id, 10)
-    print(f"\nTop 10 Peers:")
-    for rank, (peer_id, cov_val) in enumerate(top10.items(), 1):
-        print(f"  {rank}. Item {peer_id}: Cov = {cov_val:.6f}")
-        top_peers_data.append({
-            'Target_Item': f'I{i}',
-            'Target_Item_ID': item_id,
-            'Rank': rank,
-            'Peer_Item_ID': peer_id,
-            'Covariance': cov_val,
-            'Is_Top5': rank <= 5
-        })
-
-# Save top peers
-top_peers_df = pd.DataFrame(top_peers_data)
-top_peers_df.to_csv(os.path.join(RESULTS_DIR, 'mle_target_item_peers.csv'), index=False)
-print("\n[Saved] Top peers for I1 and I2.")
+top10_eigenvalues_df = pd.DataFrame({
+    'PC': [f'PC{i+1}' for i in range(10)],
+    'Eigenvalue': eigenvalues[:10],
+    'Variance_Explained_Pct': (eigenvalues[:10] / total_variance) * 100
+})
+top10_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'mle_top10_eigenvalues.csv'), index=False)
+print("[Saved] mle_top10_eigenvalues.csv")
 
 # =============================================================================
-# Phase 3: Dimensionality Reduction - Project Users
+# Covariance Matrix: Before vs After Reduction
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 3: Dimensionality Reduction - Calculate User Scores")
+print("Covariance Matrix: Before vs After Reduction")
+print("=" * 70)
+
+# Before reduction: Original covariance matrix (FULL)
+print("\n--- BEFORE Reduction (Original Covariance Matrix) ---")
+# cov_matrix_mle is already the full matrix
+print(f"Shape: {cov_matrix_mle.shape}")
+
+# After reduction: Reconstructed covariance using Top-5 and Top-10 PCs
+# Reconstructed Σ ≈ W @ Λ @ W.T where Λ = diag(eigenvalues[:k])
+
+# Top-5 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-5 PCs)...")
+Lambda_5 = np.diag(eigenvalues[:5])
+cov_reconstructed_5 = W_top5 @ Lambda_5 @ W_top5.T
+cov_reconstructed_5_df = pd.DataFrame(cov_reconstructed_5, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_5_df.shape}")
+
+# Top-10 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-10 PCs)...")
+Lambda_10 = np.diag(eigenvalues[:10])
+cov_reconstructed_10 = W_top10 @ Lambda_10 @ W_top10.T
+cov_reconstructed_10_df = pd.DataFrame(cov_reconstructed_10, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_10_df.shape}")
+
+# Save covariance files separately (FULL MATRICES)
+print("\n[Saving FULL covariance matrices...]")
+
+# Before reduction
+cov_matrix_mle.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_before_reduction.csv'))
+print("[Saved] mle_covariance_before_reduction.csv")
+
+# After Top-5 reduction
+cov_reconstructed_5_df.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_after_top5.csv'))
+print("[Saved] mle_covariance_after_top5.csv")
+
+# After Top-10 reduction
+cov_reconstructed_10_df.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_after_top10.csv'))
+print("[Saved] mle_covariance_after_top10.csv")
+
+# =============================================================================
+# Phase 3 (Point 3 & 5): Reduced Dimensional Space
+# =============================================================================
+
+print("\n" + "=" * 70)
+print("Phase 3 (Point 3 & 5): Reduced Dimensional Space")
 print("=" * 70)
 
 
@@ -176,8 +207,8 @@ user_ratings = df.groupby('user').apply(
     lambda x: dict(zip(x['item'], x['rating']))
 ).to_dict()
 
-# Project all users using Top-5 PCs
-print("\nProjecting users using Top-5 PCs...")
+# Point 3: Reduced dimensional space using Top-5 peers
+print("\nProjecting users using Top-5 PCs (Point 3)...")
 user_scores_top5 = {}
 for i, user_id in enumerate(all_users):
     user_scores_top5[user_id] = project_user(
@@ -187,8 +218,8 @@ for i, user_id in enumerate(all_users):
         print(f"  Projected {i+1:,} users...")
 print(f"Projected all {len(all_users):,} users to 5-dimensional space.")
 
-# Project all users using Top-10 PCs
-print("\nProjecting users using Top-10 PCs...")
+# Point 5: Reduced dimensional space using Top-10 peers
+print("\nProjecting users using Top-10 PCs (Point 5)...")
 user_scores_top10 = {}
 for i, user_id in enumerate(all_users):
     user_scores_top10[user_id] = project_user(
@@ -206,20 +237,20 @@ for i, user_id in enumerate(target_users, 1):
     print(f"  Top-10 Scores: {user_scores_top10[user_id]}")
 
 # =============================================================================
-# Phase 4: Prediction via Reconstruction
+# Phase 4 (Point 4 & 6): Rating Predictions
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 4: Prediction via Reconstruction")
+print("Phase 4 (Point 4 & 6): Rating Predictions")
 print("=" * 70)
 
 
 
 prediction_results = []
 
-for k_value, user_scores, W, label in [(5, user_scores_top5, W_top5, "Top-5 PCs"), 
-                                         (10, user_scores_top10, W_top10, "Top-10 PCs")]:
-    print(f"\n=== Predictions Using {label} ===")
+for k_value, user_scores, W, label, point_num in [(5, user_scores_top5, W_top5, "Top-5 PCs", 4), 
+                                                     (10, user_scores_top10, W_top10, "Top-10 PCs", 6)]:
+    print(f"\n=== Predictions Using {label} (Point {point_num}) ===")
     
     for u_idx, target_user in enumerate(target_users, 1):
         print(f"\n--- Target User U{u_idx} (User {target_user}) ---")
