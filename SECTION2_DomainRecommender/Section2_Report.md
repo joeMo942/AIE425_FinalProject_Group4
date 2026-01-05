@@ -104,15 +104,35 @@ StreamerD             0.201    Not Recommend
 
 ---
 
-## 4. Evaluation and Results
 
-### 4.1 Methodology
+---
+
+## 4. Web Application
+
+To demonstrate the practical utility of the recommender system, we developed a responsive web application that allows users to interact with the recommendation engine in real-time.
+
+### 4.1 Tech Stack
+*   **Backend:** FastAPI (Python) - chosen for its high performance and native async support.
+*   **Frontend:** HTML5, CSS3 (Dark Mode), Jinja2 Templates - providing a seamless, visually rich user experience.
+*   **Data Source:** Custom JSON stores (`unique_games.json`, `streamer_images.json`) derived from the scraping pipeline.
+
+### 4.2 Key Features
+*   **Visual Game Selection:** Instead of a text dropdown, users select their favorite games from a grid of high-quality cover images (fetched from IGDB). This reduces cognitive load and improves engagement.
+*   **Real-Time Filtering:** The app accepts multiple game and language constraints.
+*   **Dynamic Recommendations:** Results display real streamer profile pictures (Twitch API), follower counts, and "Follow" buttons that link directly to their Twitch channels.
+*   **Cold-Start Simulation:** The app effectively simulates a "new user" scenario (Cold Start) where the system builds a transient profile based *only* on the immediate selection of games/languages to generate relevant recommendations.
+
+---
+
+## 5. Evaluation and Results
+
+### 5.1 Methodology
 *   **Test Set:** We held out a random sample of 100 users with at least 5 ratings.
 *   **Metrics:**
     *   **RMSE (Root Mean Square Error):** Measures prediction accuracy (lower is better).
     *   **Hit Rate @ 10:** Percentage of times a hidden "liked" item appears in the Top 10 recommendations (higher is better).
 
-### 4.2 Results Comparison
+### 5.2 Results Comparison
 The Hybrid system was compared against standard baselines.
 
 | Method | RMSE | Hit Rate @ 10 |
@@ -123,29 +143,33 @@ The Hybrid system was compared against standard baselines.
 | Collaborative (SVD) | 0.982 | 8.45% |
 | **Hybrid (Cascade)** | **0.965** | **9.12%** |
 
-### 4.3 Analysis
+### 5.3 Analysis
 *   **Hybrid Superiority:** The Cascade Hybrid approach achieved the highest Hit Rate (9.12%) and lowest RMSE (0.965).
 *   **Complementary Strengths:** Content-based filtering effectively removed irrelevant genres (filtering out "RPG" for an "FPS" fan), allowing SVD to rank the remaining FPS streamers with high precision.
 *   **Cold-Start:** While not shown in the table, our content-based fallback ensures 100% coverage for new users, whereas CF fails completely (0% coverage) for users with 0 ratings.
 
 ---
 
-## 5. Discussion and Conclusion
+---
 
-### 5.1 What Worked Well
+## 6. Discussion and Conclusion
+
+### 6.1 What Worked Well
 *   **Cascade Architecture:** This was the most effective decision. It dramatically reduced the computational load of SVD by only running it on promising candidates, while improving accuracy by filtering out irrelevant noise.
 *   **Feature Weighting:** Heavily weighting TF-IDF text features (90%) over popularity (10%) prevented the system from becoming a glorified "Most Popular" list.
 
-### 5.2 Limitations
+### 6.2 Limitations
 *   **Static Profiles:** User preferences are modeled as static centroids. While we considered time decay, we found the dataset duration (42 days) too short to meaningfully model concept drift.
 *   **Metadata Quality:** The content-based system relies heavily on IGDB metadata. Streamers playing obscure games with missing metadata receive poorer recommendations.
 
-### 5.3 Conclusion
+### 6.3 Conclusion
 The developed Hybrid Recommender System successfully meets the project objectives. It provides a robust solution that handles the spectrum of users from cold-start (via content-based) to power users (via optimized SVD), delivering statistically significant improvements over non-hybrid baselines.
 
 ---
 
-## 6. Appendices
+---
+
+## 7. Appendices
 
 ### Appendix A: Key Code Snippets
 See `code/hybrid.py` for the Cascade Hybrid implementation.
