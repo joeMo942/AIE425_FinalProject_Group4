@@ -27,12 +27,21 @@ SECTION2_DomainRecommender/
 
 ## 🚀 Quick Start
 
+### 0. Dataset Setup (CRITICAL)
+Before running anything, you must download the necessary dataset:
+
+1.  **Download:** [INSERT_DATASET_LINK_HERE]
+2.  **Extract:** Unzip the contents directly into the `data/` folder.
+    *   Ensure the file `final_ratings.csv` is located at `SECTION2_DomainRecommender/data/final_ratings.csv`.
+    *   Ensure the file `final_items_enriched.csv` is located at `SECTION2_DomainRecommender/data/final_items_enriched.csv`.
+
 ### 1. Setup Environment
 Ensure you have Python 3.8+ and the required dependencies installed:
 ```bash
 pip install -r ../requirements.txt
 ```
-*(Key libraries: `fastapi`, `uvicorn`, `pandas`, `numpy`, `scikit-learn`, `scipy`)*
+
+
 
 ### 2. Run the Full System
 The `main.py` script serves as the **single entry point**. It will automatically:

@@ -33,3 +33,4 @@ __pycache__
 .env
 *.npy
 *.json
+!requirements.txt
