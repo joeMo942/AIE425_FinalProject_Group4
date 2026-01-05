@@ -81,10 +81,10 @@ def prepare_item_features(df_items):
     print("\n[1] Extracting TF-IDF features from text...")
     
     tfidf = TfidfVectorizer(
-        max_features=500,
+        max_features=1000,  # Increased from 500 for better text discrimination
         stop_words='english',
         ngram_range=(1, 2),
-        min_df=1,
+        min_df=2,  # Increased from 1 to filter noise/typos
         max_df=0.95
     )
     
@@ -100,7 +100,14 @@ def prepare_item_features(df_items):
     
     if available_cols:
         scaler = MinMaxScaler()
-        numerical_features = df[available_cols].fillna(0).values
+        numerical_features = df[available_cols].fillna(0).values.copy()
+        
+        # Log transform avg_viewers and followers (power-law distribution)
+        # This makes popularity signals more meaningful
+        for col_name in ['avg_viewers', 'followers']:
+            if col_name in available_cols:
+                col_idx = available_cols.index(col_name)
+                numerical_features[:, col_idx] = np.log1p(numerical_features[:, col_idx])
         
         # Invert rank (lower rank = better)
         if 'rank' in available_cols:
@@ -109,6 +116,7 @@ def prepare_item_features(df_items):
             numerical_features[:, rank_idx] = max_rank - numerical_features[:, rank_idx]
         
         numerical_normalized = scaler.fit_transform(numerical_features)
+        print(f"    Applied log1p transform to: avg_viewers, followers")
         print(f"    Numerical features: {available_cols}")
     else:
         numerical_normalized = np.zeros((len(df), 1))
@@ -116,10 +124,10 @@ def prepare_item_features(df_items):
     # --- Combine TF-IDF + Numerical ---
     print("\n[3] Combining features...")
     
-    # Weight: 70% TF-IDF, 30% numerical
+    # Weight: 90% TF-IDF, 10% numerical (prioritize relevance over popularity)
     combined_features = np.hstack([
-        tfidf_matrix.toarray() * 0.7,
-        numerical_normalized * 0.3
+        tfidf_matrix.toarray() * 0.9,
+        numerical_normalized * 0.1
     ])
     
     print(f"    Combined feature matrix: {combined_features.shape}")
@@ -157,30 +165,30 @@ def compute_item_similarity(item_data):
     return similarity_matrix
 
 
-def build_user_profiles(df_ratings, item_data, decay_rate=0.01):
+def build_user_profiles(df_ratings, item_data):
     """
-    Build user profiles based on their rated items with TIME DECAY.
+    Build user profiles based on their rated items.
     
     Implements Lecture Content-Based Matching:
     - User Profile = Centroid (Weighted Average) of the vectors of items the user liked
     - Comparing target item vector to the User Profile Centroid for recommendations
     
-    Time Decay Formula:
-        weight = rating * (1 / (1 + decay_rate * days_since_viewing))
+    Weight Formula:
+        weight = rating
     
-    This weighs recent interactions higher when building the user profile,
-    reflecting that user preferences evolve over time.
+    Note: Time decay was removed since the dataset covers only 42 days,
+    which is too short a period for significant preference drift.
+    Research shows time decay is more beneficial for longer time spans (months/years).
     
     Args:
         df_ratings: DataFrame with user ratings
         item_data: Item feature data
-        decay_rate: Decay rate for time weighting (default 0.01)
     """
     print("\n" + "=" * 60)
-    print("BUILDING USER PROFILES (with Time Decay)")
+    print("BUILDING USER PROFILES (Rating-Weighted)")
     print("=" * 60)
-    print(f"       Decay rate: {decay_rate}")
-    print("       Formula: weight = rating × (1 / (1 + decay_rate × days))")
+    print("       Note: Time decay disabled (dataset=42 days, too short for drift)")
+    print("       Formula: weight = rating")
     
     features = item_data['features']
     item_to_idx = item_data['item_to_idx']
@@ -192,17 +200,10 @@ def build_user_profiles(df_ratings, item_data, decay_rate=0.01):
     total_users = len(users)
     processed = 0
     
-    # Simulate "days since viewing" based on row order (older = earlier in dataset)
-    # In production, you would use actual timestamps
-    max_idx = len(df_ratings)
-    df_ratings = df_ratings.copy()
-    df_ratings['_row_idx'] = range(len(df_ratings))
-    df_ratings['days_since'] = (max_idx - df_ratings['_row_idx']) / (max_idx / 365)  # Scale to ~1 year
-    
     for user_id in users:
         user_ratings = df_ratings[df_ratings['user_id'] == user_id]
         
-        # Get item indices, ratings, and time decay weights
+        # Get item indices and rating weights
         item_indices = []
         weights = []
         
@@ -211,12 +212,9 @@ def build_user_profiles(df_ratings, item_data, decay_rate=0.01):
             if streamer in item_to_idx:
                 item_indices.append(item_to_idx[streamer])
                 
-                # Time decay weight: weight = rating * (1 / (1 + decay_rate * days))
+                # Simple rating weight (no time decay)
                 rating = row['rating']
-                days = row['days_since']
-                time_weight = 1.0 / (1.0 + decay_rate * days)
-                combined_weight = rating * time_weight
-                weights.append(combined_weight)
+                weights.append(rating)
         
         if item_indices:
             # Normalize weights

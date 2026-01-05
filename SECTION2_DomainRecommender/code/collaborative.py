@@ -30,7 +30,7 @@ RATINGS_FILE = DATA_DIR / "final_ratings.csv"
 
 # Model parameters
 TOP_N = 10  # Number of recommendations
-K_NEIGHBORS = 50  # Number of similar users to consider
+K_NEIGHBORS = 30  # Reduced from 50 for less smoothing, better unique tastes
 
 
 def load_data():
@@ -93,7 +93,8 @@ def create_user_item_matrix(df_ratings):
         'item_to_idx': item_to_idx,
         'idx_to_item': idx_to_item,
         'n_users': n_users,
-        'n_items': n_items
+        'n_items': n_items,
+        'binary_matrix': (user_item_matrix > 0).astype(float)  # Pre-compute binary matrix for co-ratings
     }
 
 
@@ -154,12 +155,76 @@ def compute_user_means(matrix_data):
     return user_means
 
 
+def compute_discount_beta(matrix_data, sample_size=1000):
+    """
+    Compute optimal discount factor (beta) for significance weighting.
+    
+    Beta is set to the median number of co-rated items across a sample of user pairs.
+    This ensures that similarity between users with fewer than median co-ratings
+    is appropriately discounted, while users with more co-ratings get full weight.
+    
+    Research shows this approach (from Netflix Prize literature) significantly
+    improves prediction accuracy for sparse datasets.
+    
+    Args:
+        matrix_data: User-item matrix data
+        sample_size: Number of user pairs to sample for estimation
+    
+    Returns:
+        float: Optimal beta value
+    """
+    print("\n" + "-" * 40)
+    print("Computing optimal discount factor (beta)...")
+    
+    user_item_matrix = matrix_data['matrix']
+    n_users = matrix_data['n_users']
+    
+    # Sample random pairs of users
+    np.random.seed(42)
+    sample_users1 = np.random.choice(n_users, size=min(sample_size, n_users), replace=False)
+    sample_users2 = np.random.choice(n_users, size=min(sample_size, n_users), replace=False)
+    
+    co_ratings_list = []
+    for u1, u2 in zip(sample_users1, sample_users2):
+        if u1 == u2:
+            continue
+        # Count co-rated items
+        u1_rated = user_item_matrix[u1].toarray().flatten() > 0
+        u2_rated = user_item_matrix[u2].toarray().flatten() > 0
+        n_common = np.sum(u1_rated & u2_rated)
+        if n_common > 0:  # Only count pairs with at least 1 co-rating
+            co_ratings_list.append(n_common)
+    
+    if not co_ratings_list:
+        beta = 10  # Default fallback
+    else:
+        # Use median as beta (standard practice)
+        beta = float(np.median(co_ratings_list))
+        # Ensure beta is at least 1
+        beta = max(1.0, beta)
+    
+    print(f"       Sampled {len(co_ratings_list)} user pairs with co-ratings")
+    print(f"       Co-rating distribution: min={min(co_ratings_list) if co_ratings_list else 0}, "
+          f"median={np.median(co_ratings_list) if co_ratings_list else 0:.1f}, "
+          f"max={max(co_ratings_list) if co_ratings_list else 0}")
+    print(f"[DONE] Optimal beta = {beta:.1f}")
+    
+    return beta
+
+
 def predict_rating(user_idx, item_idx, matrix_data, similarity_matrix, 
-                   user_means, k_neighbors=K_NEIGHBORS):
+                   user_means, k_neighbors=K_NEIGHBORS, discount_beta=None):
     """
     Predict rating for a user-item pair using weighted average of neighbors.
     
     Formula: r_hat = mean_u + sum(sim(u,v) * (r_vi - mean_v)) / sum(|sim(u,v)|)
+    
+    Includes Discount Factor (significance weighting) to handle sparse overlaps:
+        discount = min(n_common_items / beta, 1.0)
+        adjusted_sim = raw_sim * discount
+    
+    Beta is typically set to the median number of co-rated items across user pairs.
+    Common values: 10-100 depending on dataset density.
     """
     user_item_matrix = matrix_data['matrix']
     
@@ -172,12 +237,40 @@ def predict_rating(user_idx, item_idx, matrix_data, similarity_matrix,
     
     # Get similarities between target user and users who rated
     if similarity_matrix is not None:
-        similarities = similarity_matrix[user_idx, users_who_rated]
+        raw_similarities = similarity_matrix[user_idx, users_who_rated]
     else:
         # On-demand computation for large datasets
         user_vector = user_item_matrix[user_idx]
         neighbor_vectors = user_item_matrix[users_who_rated]
-        similarities = cosine_similarity(user_vector, neighbor_vectors)[0]
+        raw_similarities = cosine_similarity(user_vector, neighbor_vectors)[0]
+    
+    # Apply Discount Factor (significance weighting) if beta is provided
+    # Apply Discount Factor (significance weighting) if beta is provided
+    if discount_beta is not None and discount_beta > 0:
+        # Optimized: Use pre-computed co-rating counts vector if available
+        if 'co_rating_counts' in matrix_data and matrix_data['co_rating_counts'] is not None:
+             # Fast lookup: n_common for all neighbors at once
+             n_common_vector = matrix_data['co_rating_counts']
+             neighbor_co_ratings = n_common_vector[users_who_rated]
+             
+             # Vectorized discount calculation
+             discounts = np.minimum(neighbor_co_ratings / discount_beta, 1.0)
+             similarities = raw_similarities * discounts
+             
+        else:
+             # Fallback: Slow loop (O(n) per prediction)
+             discounted_similarities = []
+             for i, neighbor_idx in enumerate(users_who_rated):
+                 # Re-fetch masks (slow)
+                 user_rated_mask = user_item_matrix[user_idx].toarray().flatten() > 0
+                 neighbor_rated_mask = user_item_matrix[neighbor_idx].toarray().flatten() > 0
+                 n_common = np.sum(user_rated_mask & neighbor_rated_mask)
+                 
+                 discount = min(n_common / discount_beta, 1.0)
+                 discounted_similarities.append(raw_similarities[i] * discount)
+             similarities = np.array(discounted_similarities)
+    else:
+        similarities = raw_similarities
     
     # Sort by similarity and take top k
     if len(users_who_rated) > k_neighbors:
@@ -215,7 +308,7 @@ def predict_rating(user_idx, item_idx, matrix_data, similarity_matrix,
 
 
 def recommend_for_user(user_id, matrix_data, similarity_matrix, user_means,
-                       df_ratings, n_recommendations=TOP_N):
+                       df_ratings, n_recommendations=TOP_N, discount_beta=None):
     """
     Generate recommendations for a specific user.
     Predict ratings for all unrated items and return top-N.
@@ -229,6 +322,22 @@ def recommend_for_user(user_id, matrix_data, similarity_matrix, user_means,
     
     user_idx = user_to_idx[user_id]
     
+    # OPTIMIZATION: Pre-compute co-rating counts for this user against ALL other users
+    # This turns O(N_items * N_neighbors * N_features) into O(1) per item
+    if discount_beta is not None and 'binary_matrix' in matrix_data:
+        # Vectorized co-rating count: (1, n_items) @ (n_items, n_users) -> (1, n_users)
+        # Note: We use transpose of binary_matrix for items->users
+        binary_matrix = matrix_data['binary_matrix']
+        user_vector = binary_matrix[user_idx]
+        
+        # sparse dot product: returns co-rating count with every user
+        co_rating_counts = binary_matrix.dot(user_vector.T).toarray().flatten()
+        
+        # Temporarily store in matrix_data to pass to predict_rating
+        matrix_data['co_rating_counts'] = co_rating_counts
+    else:
+        matrix_data['co_rating_counts'] = None
+    
     # Get items user has already rated
     user_ratings = user_item_matrix[user_idx].toarray().flatten()
     unrated_items = np.where(user_ratings == 0)[0]
@@ -237,7 +346,8 @@ def recommend_for_user(user_id, matrix_data, similarity_matrix, user_means,
     predictions = []
     for item_idx in unrated_items:
         pred = predict_rating(user_idx, item_idx, matrix_data, 
-                             similarity_matrix, user_means)
+                             similarity_matrix, user_means,
+                             discount_beta=discount_beta)
         predictions.append({
             'item_idx': item_idx,
             'streamer': idx_to_item[item_idx],
@@ -251,13 +361,16 @@ def recommend_for_user(user_id, matrix_data, similarity_matrix, user_means,
 
 
 def evaluate_recommendations(df_ratings, matrix_data, similarity_matrix, 
-                            user_means, n_users=100):
+                            user_means, n_users=100, discount_beta=None):
     """
     Evaluate recommendation quality using held-out ratings.
     """
     print("\n" + "=" * 60)
     print("EVALUATING RECOMMENDATIONS")
     print("=" * 60)
+    
+    if discount_beta is not None:
+        print(f"       Using discount factor beta = {discount_beta:.1f}")
     
     # Sample users with at least 3 ratings
     user_rating_counts = df_ratings.groupby('user_id').size()
@@ -290,7 +403,7 @@ def evaluate_recommendations(df_ratings, matrix_data, similarity_matrix,
         # Get recommendations
         recommendations = recommend_for_user(
             user_id, matrix_data, similarity_matrix, user_means,
-            df_ratings, n_recommendations=TOP_N
+            df_ratings, n_recommendations=TOP_N, discount_beta=discount_beta
         )
         
         rec_items = [r['streamer'] for r in recommendations]
@@ -607,15 +720,19 @@ def main():
     # Compute user means
     user_means = compute_user_means(matrix_data)
     
+    # Compute optimal discount factor (beta) for significance weighting
+    discount_beta = compute_discount_beta(matrix_data)
+    
     # Compute user similarity (for K-NN baseline)
     similarity_matrix = compute_user_similarity(matrix_data)
     
-    # Evaluate K-NN
+    # Evaluate K-NN with discount factor
     print("\n" + "=" * 60)
-    print("K-NN COLLABORATIVE FILTERING EVALUATION")
+    print("K-NN COLLABORATIVE FILTERING EVALUATION (with discount factor)")
     print("=" * 60)
     knn_metrics = evaluate_recommendations(
-        df_ratings, matrix_data, similarity_matrix, user_means
+        df_ratings, matrix_data, similarity_matrix, user_means, 
+        discount_beta=discount_beta
     )
     
     # =========================================================================

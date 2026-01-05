@@ -1,11 +1,10 @@
 """
-Data Preprocessing for Live Stream Recommendation System
-=========================================================
-Team Members:
-- [Add your names and IDs here]
-
-This script processes the 100k Twitch interactions dataset and converts
-watch time to 1-5 ratings using quantile-based bucketing.
+Data Preprocessing, Merging, and EDA Pipeline
+=============================================
+This script performs the entire data preparation pipeline for Section 2:
+1. Preprocessing: Converts raw logs to ratings.
+2. Merging: Enriches ratings with streamer metadata.
+3. EDA: Generates statistics and visualizations.
 """
 
 import warnings
@@ -13,7 +12,9 @@ warnings.filterwarnings("ignore")
 
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from pathlib import Path
+import sys
 
 # ============================================================================
 # Configuration
@@ -22,10 +23,24 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 RESULTS_DIR = Path(__file__).parent.parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
 
+# Input Files
 RAW_FILE = DATA_DIR / "100k_a.csv"
+ARCHIVE_FILE = DATA_DIR / "datasetV2.csv"
+SCRAPED_FILE = DATA_DIR / "streamer_metadata.csv"
+GAME_METADATA_FILE = DATA_DIR / "game_metadata.csv"
+
+# Intermediate Output Files
 OUTPUT_RATINGS = DATA_DIR / "processed_ratings.csv"
 OUTPUT_STREAMERS = DATA_DIR / "unique_streamers.txt"
 
+# Final Output Files
+FINAL_RATINGS = DATA_DIR / "final_ratings.csv"
+FINAL_ITEMS = DATA_DIR / "final_items_enriched.csv"
+
+
+# ============================================================================
+# PART 1: PREPROCESSING (Raw Logs -> Ratings)
+# ============================================================================
 
 def load_raw_data(filepath: Path) -> pd.DataFrame:
     """Load raw interaction data from CSV."""
@@ -33,117 +48,60 @@ def load_raw_data(filepath: Path) -> pd.DataFrame:
     print("PHASE 1: LOADING RAW DATA")
     print("=" * 60)
     
+    if not filepath.exists():
+        raise FileNotFoundError(f"Raw data file not found: {filepath}")
+
     df = pd.read_csv(
         filepath,
         header=None,
         names=['user_id', 'stream_id', 'streamer_username', 'time_start', 'time_stop']
     )
-    
     print(f"[LOADED] {filepath.name}")
     print(f"         Rows: {len(df):,}")
-    print(f"         Columns: {df.columns.tolist()}")
-    
     return df
-
 
 def clean_usernames(df: pd.DataFrame) -> pd.DataFrame:
-    """Clean streamer usernames (lowercase, strip whitespace)."""
-    print("\n" + "-" * 40)
-    print("Cleaning streamer usernames...")
-    
+    """Clean streamer usernames."""
+    print("\nCleaning streamer usernames...")
     df['streamer_username'] = df['streamer_username'].str.lower().str.strip()
-    
-    print(f"[DONE] Cleaned {df['streamer_username'].nunique():,} unique streamers")
-    
     return df
-
 
 def calculate_duration(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Calculate watch duration in minutes.
-    Dataset uses 10-minute intervals, so duration = (stop - start) * 10
-    """
-    print("\n" + "-" * 40)
+    """Calculate watch duration."""
     print("Calculating watch duration...")
-    
     df['duration_minutes'] = (df['time_stop'] - df['time_start']) * 10
-    
-    # Remove invalid durations (negative or zero)
-    before_count = len(df)
     df = df[df['duration_minutes'] > 0].copy()
-    removed = before_count - len(df)
-    
-    print(f"[DONE] Duration range: {df['duration_minutes'].min():.0f} - {df['duration_minutes'].max():.0f} mins")
-    print(f"       Removed {removed:,} invalid rows (duration <= 0)")
-    
     return df
 
-
 def aggregate_interactions(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Aggregate duplicate user-streamer interactions.
-    Sum total watch time per user-streamer pair.
-    """
-    print("\n" + "-" * 40)
-    print("Aggregating user-streamer interactions...")
-    
-    before_rows = len(df)
-    
+    """Aggregate duplicate user-streamer interactions."""
+    print("Aggregating interactions...")
     df_agg = df.groupby(['user_id', 'streamer_username']).agg(
         total_minutes=('duration_minutes', 'sum'),
         interaction_count=('stream_id', 'count')
     ).reset_index()
-    
-    print(f"[DONE] {before_rows:,} rows → {len(df_agg):,} unique user-streamer pairs")
-    print(f"       Avg interactions per pair: {df_agg['interaction_count'].mean():.2f}")
-    
     return df_agg
 
-
 def convert_to_ratings(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Convert total watch time to 1-5 ratings using LOG-TRANSFORMED MIN-MAX NORMALIZATION.
+    """Convert watch time to 1-5 ratings using user-specific log-min-max normalization."""
+    print("Converting to ratings...")
     
-    Logic:
-    1. Apply log1p(total_minutes) to compress long-tail distribution.
-    2. For each user, find their min and max LOG watch time.
-    3. Normalize to 0-1 scale: (log_x - log_min) / (log_max - log_min)
-    4. Map normalized score to 1-5 rating bins.
+    # Log transformation
+    df['log_minutes'] = np.log1p(df['total_minutes'])
     
-    Rationale: Log transformation compresses outliers. A 30-minute session now maps 
-    closer to a 3/5 rating rather than 1/5 (when compared against 100-hour outliers).
-    This reflects moderate interest accurately.
-    """
-    print("\n" + "-" * 40)
-    print("Converting watch time to 1-5 ratings (Log + User Min-Max)...")
-    
-    # Step 1: Apply log transformation to compress long-tail
-    df['log_minutes'] = np.log1p(df['total_minutes'])  # log(1 + x)
-    
-    print(f"       Log transformation applied: log1p(total_minutes)")
-    print(f"       Log range: {df['log_minutes'].min():.2f} - {df['log_minutes'].max():.2f}")
-    
-    # Step 2: Calculate min and max LOG values per user
+    # Min-max per user
     df['user_log_min'] = df.groupby('user_id')['log_minutes'].transform('min')
     df['user_log_max'] = df.groupby('user_id')['log_minutes'].transform('max')
     df['user_log_range'] = df['user_log_max'] - df['user_log_min']
     
-    # Step 3: Normalize LOG values to 0-1 scale
-    # Handle users with single interaction or 0 range (assign rating 4)
-    df['normalized'] = 0.75  # Default for zero range
-    
+    df['normalized'] = 0.75  # Default
     mask_range = df['user_log_range'] > 0
     df.loc[mask_range, 'normalized'] = (
         (df.loc[mask_range, 'log_minutes'] - df.loc[mask_range, 'user_log_min']) / 
         df.loc[mask_range, 'user_log_range']
     )
     
-    # Step 4: Map normalized score (0-1) to ratings 1-5
-    # 0.0 - 0.2 → 1
-    # 0.2 - 0.4 → 2
-    # 0.4 - 0.6 → 3
-    # 0.6 - 0.8 → 4
-    # 0.8 - 1.0 → 5
+    # Map to buckets
     df['rating'] = pd.cut(
         df['normalized'],
         bins=[0, 0.2, 0.4, 0.6, 0.8, 1.0],
@@ -151,99 +109,197 @@ def convert_to_ratings(df: pd.DataFrame) -> pd.DataFrame:
         include_lowest=True
     ).astype(int)
     
-    # Drop temp columns
-    df = df.drop(columns=['log_minutes', 'user_log_min', 'user_log_max', 
-                          'user_log_range', 'normalized'])
+    return df.drop(columns=['log_minutes', 'user_log_min', 'user_log_max', 'user_log_range', 'normalized'])
+
+def save_intermediate_outputs(df: pd.DataFrame):
+    """Save processed ratings."""
+    print("\nSaving intermediate processed ratings...")
+    df[['user_id', 'streamer_username', 'rating', 'total_minutes']].to_csv(OUTPUT_RATINGS, index=False)
     
-    # Print distribution
-    rating_dist = df['rating'].value_counts().sort_index()
-    print("\n       Rating Distribution (after log normalization):")
-    for rating, count in rating_dist.items():
-        pct = 100 * count / len(df)
-        bar = "█" * int(pct / 2)
-        print(f"       {rating}: {count:>8,} ({pct:5.1f}%) {bar}")
-        
+    with open(OUTPUT_STREAMERS, 'w') as f:
+        for streamer in sorted(df['streamer_username'].unique()):
+            f.write(f"{streamer}\n")
+    print(f"[SAVED] {OUTPUT_RATINGS.name}")
+
+
+# ============================================================================
+# PART 2: MERGING (Ratings + Metadata -> Final Dataset)
+# ============================================================================
+
+def load_and_prepare_archive_data() -> pd.DataFrame:
+    """Load and prep archive metadata."""
+    print("\nLoading archive data...")
+    df = pd.read_csv(ARCHIVE_FILE)
+    
+    df = df.rename(columns={
+        'NAME': 'streamer_username', 'LANGUAGE': 'language',
+        'MOST_STREAMED_GAME': '1st_game', '2ND_MOST_STREAMED_GAME': '2nd_game',
+        'TYPE': 'type', 'RANK': 'rank', 'AVG_VIEWERS_PER_STREAM': 'avg_viewers',
+        'TOTAL_FOLLOWERS': 'followers'
+    })
+    df['streamer_username'] = df['streamer_username'].str.lower().str.strip()
+    
+    # Simple text features for archive data
+    df['text_features'] = (
+        df['type'].fillna('') + ' ' + df['1st_game'].fillna('') + ' ' +
+        df['2nd_game'].fillna('') + ' ' + df['language'].fillna('')
+    ).str.strip()
     return df
 
+def load_and_prepare_scraped_data() -> pd.DataFrame:
+    """Load and prep scraped data (with IGDB enrichment)."""
+    if not SCRAPED_FILE.exists():
+        return None
+        
+    print("Loading scraped data...")
+    df = pd.read_csv(SCRAPED_FILE)
+    
+    df = df.rename(columns={
+        'NAME': 'streamer_username', 'LANGUAGE': 'language',
+        'MOST_STREAMED_GAME': '1st_game', '2ND_MOST_STREAMED_GAME': '2nd_game',
+        'RANK': 'rank', 'AVG_VIEWERS_PER_STREAM': 'avg_viewers',
+        'TOTAL_FOLLOWERS': 'followers'
+    })
+    df['streamer_username'] = df['streamer_username'].astype(str).str.lower().str.strip()
+    
+    # Load IGDB enrichment
+    game_lookup = {}
+    if GAME_METADATA_FILE.exists():
+        print(f"[ENRICH] Loading game metadata...")
+        df_games = pd.read_csv(GAME_METADATA_FILE)
+        for _, row in df_games.iterrows():
+            gname = str(row['game_name']).strip()
+            desc = f"{row['summary']} {row['genres']} {row['themes']} {row['keywords']}"
+            game_lookup[gname] = str(desc).replace('nan', '').strip()
+            
+    # Create enriched text features
+    def create_features(row):
+        base = f"{row.get('language', '')} {row.get('1st_game', '')} {row.get('2nd_game', '')}"
+        enrich1 = game_lookup.get(str(row.get('1st_game', '')), '')
+        enrich2 = game_lookup.get(str(row.get('2nd_game', '')), '')
+        return f"{base} {enrich1} {enrich2}".strip()
 
-def save_outputs(df: pd.DataFrame):
-    """Save processed ratings and unique streamer list."""
-    print("\n" + "=" * 60)
-    print("SAVING OUTPUTS")
+    df['text_features'] = df.apply(create_features, axis=1)
+    return df
+
+def merge_datasets(df_ratings: pd.DataFrame, use_scraped: bool = True):
+    """Merge ratings with best available metadata."""
+    print("=" * 60)
+    print("PHASE 2: MERGING DATASETS")
     print("=" * 60)
     
-    # Save ratings CSV
-    output_df = df[['user_id', 'streamer_username', 'rating', 'total_minutes']].copy()
-    output_df.to_csv(OUTPUT_RATINGS, index=False)
-    print(f"[SAVED] {OUTPUT_RATINGS.name}")
+    df_items = None
+    if use_scraped:
+        df_items = load_and_prepare_scraped_data()
     
-    # Save unique streamers list (for scraping)
-    unique_streamers = df['streamer_username'].unique()
-    with open(OUTPUT_STREAMERS, 'w') as f:
-        for streamer in sorted(unique_streamers):
-            f.write(f"{streamer}\n")
-    print(f"[SAVED] {OUTPUT_STREAMERS.name} ({len(unique_streamers):,} streamers)")
+    if df_items is None:
+        print("[INFO] Using archive data as fallback.")
+        df_items = load_and_prepare_archive_data()
+        
+    print("Performing inner join...")
+    df_merged = df_ratings.merge(
+        df_items[['streamer_username', 'text_features', 'language', 'rank', 
+                  'avg_viewers', 'followers', '1st_game', '2nd_game']],
+        on='streamer_username',
+        how='inner'
+    )
+    
+    df_final_ratings = df_merged[['user_id', 'streamer_username', 'rating']].copy()
+    df_final_items = df_items[df_items['streamer_username'].isin(
+        df_merged['streamer_username'].unique()
+    )].copy()
+    
+    print(f"[MERGED] Final Users: {df_final_ratings['user_id'].nunique():,}")
+    print(f"[MERGED] Final Items: {df_final_ratings['streamer_username'].nunique():,}")
+    
+    return df_final_ratings, df_final_items
+
+def save_final_datasets(df_ratings, df_items):
+    print("\nSaving final datasets...")
+    df_ratings.to_csv(FINAL_RATINGS, index=False)
+    df_items.to_csv(FINAL_ITEMS, index=False)
+    print(f"[SAVED] {FINAL_RATINGS.name}")
+    print(f"[SAVED] {FINAL_ITEMS.name}")
 
 
-def print_summary(df: pd.DataFrame):
-    """Print final dataset summary."""
-    print("\n" + "=" * 60)
-    print("FINAL DATASET SUMMARY")
+# ============================================================================
+# PART 3: EXPLORATORY DATA ANALYSIS (EDA)
+# ============================================================================
+
+def run_eda(df_ratings, df_items):
+    """Run Exploratory Data Analysis."""
+    print("=" * 60)
+    print("PHASE 3: EXPLORATORY DATA ANALYSIS")
     print("=" * 60)
     
-    n_users = df['user_id'].nunique()
-    n_items = df['streamer_username'].nunique()
-    n_ratings = len(df)
+    # Basic Stats
+    n_users = df_ratings['user_id'].nunique()
+    n_items = df_ratings['streamer_username'].nunique()
+    sparsity = 100 * (1 - len(df_ratings) / (n_users * n_items))
     
-    # Sparsity calculation
-    possible = n_users * n_items
-    sparsity = 100 * (1 - n_ratings / possible)
+    print(f"Sparsity: {sparsity:.4f}%")
+    with open(RESULTS_DIR / "Sec2_basic_statistics.txt", 'w') as f:
+        f.write(f"Users: {n_users}\nItems: {n_items}\nSparsity: {sparsity:.4f}%\n")
     
-    print(f"       Users:        {n_users:>10,}  (min required: 5,000)")
-    print(f"       Items:        {n_items:>10,}  (min required: 500)")
-    print(f"       Interactions: {n_ratings:>10,}  (min required: 50,000)")
-    print(f"       Sparsity:     {sparsity:>10.4f}%")
+    # Rating Distribution
+    counts = df_ratings['rating'].value_counts().sort_index()
+    plt.figure(figsize=(8, 5))
+    counts.plot(kind='bar', color='coral', edgecolor='black')
+    plt.title('Rating Distribution')
+    plt.xlabel('Rating'); plt.ylabel('Count')
+    plt.tight_layout()
+    plt.savefig(RESULTS_DIR / "Sec2_rating_distribution.png")
+    plt.close()
+    print("[PLOT] Rating distribution saved.")
     
-    # Validation
-    print("\n" + "-" * 40)
-    print("VALIDATION:")
-    checks = [
-        ("Users >= 5,000", n_users >= 5000),
-        ("Items >= 500", n_items >= 500),
-        ("Interactions >= 50,000", n_ratings >= 50000),
-        ("Ratings in 1-5 range", df['rating'].min() >= 1 and df['rating'].max() <= 5),
-    ]
+    # User Activity Long-Tail
+    user_counts = df_ratings.groupby('user_id').size().sort_values(ascending=False)
+    cumulative = np.cumsum(user_counts.values) / user_counts.sum()
     
-    for check_name, passed in checks:
-        status = "✓ PASS" if passed else "✗ FAIL"
-        print(f"       {status}: {check_name}")
+    plt.figure(figsize=(8, 5))
+    plt.plot(np.arange(len(cumulative)) / len(cumulative) * 100, cumulative * 100)
+    plt.axhline(80, color='red', linestyle='--')
+    plt.title('User Activity (Long-Tail)')
+    plt.xlabel('% Users'); plt.ylabel('% Ratings')
+    plt.grid(True)
+    plt.savefig(RESULTS_DIR / "Sec2_user_activity.png")
+    plt.close()
+    print("[PLOT] User activity saved.")
+    
+    # Item Popularity
+    item_counts = df_ratings.groupby('streamer_username').size().sort_values(ascending=False)
+    plt.figure(figsize=(10, 5))
+    plt.bar(range(len(item_counts)), item_counts.values, color='steelblue')
+    plt.title('Item Popularity')
+    plt.xlabel('Items'); plt.ylabel('Ratings')
+    plt.savefig(RESULTS_DIR / "Sec2_item_popularity.png")
+    plt.close()
+    print("[PLOT] Item popularity saved.")
 
+
+# ============================================================================
+# MAIN PIPELINE
+# ============================================================================
 
 def main():
-    """Main execution pipeline."""
-    print("\n" + "=" * 60)
-    print("LIVE STREAM RECOMMENDATION - DATA PREPROCESSING")
-    print("=" * 60)
+    print("STARTING FULL PREPROCESSING PIPELINE...")
     
-    # Phase 1: Load and process data
-    df = load_raw_data(RAW_FILE)
-    df = clean_usernames(df)
-    df = calculate_duration(df)
-    df = aggregate_interactions(df)
-    df = convert_to_ratings(df)
+    # 1. Preprocess
+    df_raw = load_raw_data(RAW_FILE)
+    df_clean = clean_usernames(df_raw)
+    df_dur = calculate_duration(df_clean)
+    df_agg = aggregate_interactions(df_dur)
+    df_processed = convert_to_ratings(df_agg)
+    save_intermediate_outputs(df_processed)
     
-    # Save outputs
-    save_outputs(df)
+    # 2. Merge
+    df_final_ratings, df_final_items = merge_datasets(df_processed, use_scraped=True)
+    save_final_datasets(df_final_ratings, df_final_items)
     
-    # Print summary
-    print_summary(df)
+    # 3. EDA
+    run_eda(df_final_ratings, df_final_items)
     
-    print("\n" + "=" * 60)
-    print("[DONE] Data preprocessing complete!")
-    print("=" * 60 + "\n")
-    
-    return df
-
+    print("\n[DONE] Pipeline execution complete!")
 
 if __name__ == "__main__":
     main()
