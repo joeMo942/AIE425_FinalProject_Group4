@@ -206,7 +206,7 @@ def load_full_sparse_matrix():
     return sparse_matrix, unique_users, unique_items, global_mean, user_to_idx, item_to_idx, item_means
 
 
-def compute_sparse_truncated_svd(sparse_matrix, k=100):
+def compute_sparse_truncated_svd(sparse_matrix, k=20):
     """
     Compute truncated SVD using scipy.sparse.linalg.svds.
     This is memory efficient for large sparse matrices.
