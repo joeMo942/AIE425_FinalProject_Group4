@@ -2,95 +2,95 @@ Latent Factor Interpretation Analysis
 ==================================================
 
 FACTOR 1
-  Singular value: 16585.4222
-  Variance explained: 99.8814%
+  Singular value: 83.1903
+  Variance explained: 3.5565%
   Interpretation: Global mean effect / baseline rating tendency
 
   Top Items:
-    Item 2994: -0.0277
-    Item 692: -0.0276
-    Item 988: -0.0272
-    Item 3255: -0.0267
-    Item 2095: -0.0266
-    Item 2777: -0.0264
-    Item 2373: -0.0264
-    Item 1539: -0.0262
-    Item 4537: -0.0261
-    Item 5309: -0.0261
+    Item 581: 0.2377
+    Item 41: 0.2108
+    Item 507: 0.1812
+    Item 426: 0.1794
+    Item 66: 0.1773
+    Item 222: 0.1586
+    Item 907: 0.1306
+    Item 44: 0.1293
+    Item 1022: 0.1237
+    Item 744: 0.1233
 
   Top Users:
-    User 12629: -0.0102
-    User 26794: -0.0102
-    User 10876: -0.0102
-    User 1541: -0.0102
-    User 49280: -0.0102
-    User 23316: -0.0102
-    User 52280: -0.0102
-    User 12574: -0.0102
-    User 15755: -0.0102
-    User 97071: -0.0102
+    User 26794: 0.0575
+    User 22313: -0.0552
+    User 55741: 0.0549
+    User 15755: 0.0539
+    User 91633: 0.0507
+    User 76623: 0.0495
+    User 24123: 0.0479
+    User 23809: 0.0447
+    User 52280: 0.0447
+    User 135362: 0.0447
 
 --------------------------------------------------
 
 FACTOR 2
-  Singular value: 45.0511
-  Variance explained: 0.0007%
+  Singular value: 70.3113
+  Variance explained: 2.5406%
   Interpretation: Major genre/preference dimension
 
   Top Items:
-    Item 41: -0.2975
-    Item 1022: -0.2186
-    Item 507: -0.1772
-    Item 222: -0.1731
-    Item 498: -0.1689
-    Item 426: -0.1589
-    Item 685: -0.1471
-    Item 907: -0.1346
-    Item 767: -0.1330
-    Item 627: -0.1258
+    Item 581: 0.5619
+    Item 222: 0.2935
+    Item 840: -0.1563
+    Item 767: -0.1199
+    Item 299: 0.1162
+    Item 601: 0.1103
+    Item 38: 0.1079
+    Item 507: -0.1038
+    Item 488: -0.0999
+    Item 1151: -0.0938
 
   Top Users:
-    User 22313: 0.0949
-    User 55741: -0.0741
-    User 23809: -0.0717
-    User 15755: -0.0701
-    User 76623: -0.0683
-    User 12574: -0.0679
-    User 42419: 0.0679
-    User 135362: -0.0651
-    User 111976: -0.0624
-    User 13753: -0.0602
+    User 224: 0.0577
+    User 19263: 0.0473
+    User 53846: 0.0447
+    User 14806: 0.0408
+    User 6682: 0.0396
+    User 16157: 0.0391
+    User 6485: 0.0376
+    User 25171: 0.0370
+    User 283: 0.0362
+    User 2912: 0.0358
 
 --------------------------------------------------
 
 FACTOR 3
-  Singular value: 34.8280
-  Variance explained: 0.0004%
+  Singular value: 62.0103
+  Variance explained: 1.9761%
   Interpretation: Fine-grained preference dimension 3
 
   Top Items:
-    Item 222: -0.4114
-    Item 507: 0.2360
-    Item 627: -0.1829
-    Item 426: 0.1597
-    Item 488: 0.1589
-    Item 277: -0.1403
-    Item 755: 0.1308
-    Item 907: 0.1305
-    Item 840: 0.1275
-    Item 732: -0.1236
+    Item 581: -0.7581
+    Item 222: 0.4206
+    Item 840: -0.1055
+    Item 277: 0.0976
+    Item 1256: 0.0888
+    Item 808: 0.0885
+    Item 41: 0.0871
+    Item 299: 0.0798
+    Item 498: 0.0748
+    Item 732: 0.0734
 
   Top Users:
-    User 77009: 0.0923
-    User 91633: 0.0911
-    User 5992: 0.0907
-    User 55741: 0.0824
-    User 52280: 0.0817
-    User 3059: 0.0812
-    User 1229: 0.0754
-    User 6039: 0.0719
-    User 42541: 0.0640
-    User 32425: 0.0632
+    User 783: 0.0433
+    User 6052: 0.0415
+    User 5139: 0.0407
+    User 12759: 0.0406
+    User 11: 0.0398
+    User 3063: 0.0366
+    User 94942: 0.0363
+    User 23939: 0.0357
+    User 17933: 0.0356
+    User 29207: 0.0354
 
 --------------------------------------------------
 

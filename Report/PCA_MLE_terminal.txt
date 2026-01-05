@@ -1,15 +1,119 @@
 ======================================================================
-PCA MLE Terminal Output
+Part 2: PCA with Maximum Likelihood Estimation (MLE)
 ======================================================================
 
-Top-10 Scores: [ 4.95319186 -1.27312941  2.95258001  0.13255917 -0.48431409 -6.46257995
+Item Average Ratings loaded: 11,123 items
+Target Users: [134471, 27768, 16157]
+Target Items: [1333, 1162]
+Dataset loaded: 2,149,655 ratings
+Total items: 11,123
+
+--- Item Means for Target Items ---
+I1 (Item 1333): μ = 3.694656
+I2 (Item 1162): μ = 3.737722
+
+======================================================================
+Phase 1 (Point 1): Generate MLE Covariance Matrix
+======================================================================
+
+[Loading cached MLE covariance matrix...]
+Loaded from cache.
+
+--- MLE Covariance Matrix Shape ---
+Shape: (11123, 11123)
+
+--- Covariance Values for Target Items ---
+Var(I1): 0.557218
+Var(I2): 0.636872
+Cov(I1, I2): 0.134281
+
+======================================================================
+Phase 2 (Point 2): Eigen Decomposition + Top Peers
+======================================================================
+
+Computing eigenvalues and eigenvectors...
+
+--- Top 10 Eigenvalues ---
+  λ_1 = 430.304627
+  λ_2 = 189.063894
+  λ_3 = 163.208304
+  λ_4 = 159.948145
+  λ_5 = 154.299303
+  λ_6 = 136.400185
+  λ_7 = 133.385840
+  λ_8 = 125.410466
+  λ_9 = 123.279958
+  λ_10 = 117.286493
+
+Total variance: 7926.099340
+
+--- Variance Explained ---
+  Top-5 PCs: 13.84%
+  Top-10 PCs: 21.86%
+
+Projection matrix W_5 shape: (11123, 5)
+Projection matrix W_10 shape: (11123, 10)
+
+[Saving eigenvalues...]
+[Saved] mle_top5_eigenvalues.csv
+[Saved] mle_top10_eigenvalues.csv
+
+======================================================================
+Covariance Matrix: Before vs After Reduction
+======================================================================
+
+--- BEFORE Reduction (Original Covariance Matrix) ---
+Shape: (11123, 11123)
+
+Computing Reconstructed Covariance Matrix (Top-5 PCs)...
+Shape: (11123, 11123)
+
+Computing Reconstructed Covariance Matrix (Top-10 PCs)...
+Shape: (11123, 11123)
+
+[Saving FULL covariance matrices...]
+[Saved] mle_covariance_before_reduction.csv
+[Saved] mle_covariance_after_top5.csv
+[Saved] mle_covariance_after_top10.csv
+
+======================================================================
+Phase 3 (Point 3 & 5): Reduced Dimensional Space
+======================================================================
+Total users to project: 147,914
+Building user-item rating lookup...
+
+Projecting users using Top-5 PCs (Point 3)...
+  Projected 50,000 users...
+  Projected 100,000 users...
+Projected all 147,914 users to 5-dimensional space.
+
+Projecting users using Top-10 PCs (Point 5)...
+  Projected 50,000 users...
+  Projected 100,000 users...
+Projected all 147,914 users to 10-dimensional space.
+
+--- User Scores (T_u) for Target Users ---
+
+Target User U1 (User 134471):
+  Top-5 Scores:  [ 0.01832806 -0.00366227  0.00701188 -0.00945071  0.00397386]
+  Top-10 Scores: [ 0.01832806 -0.00366227  0.00701188 -0.00945071  0.00397386 -0.02342974
+ -0.00519446  0.03311889 -0.00269212  0.02519111]
+
+Target User U2 (User 27768):
+  Top-5 Scores:  [ 2.57578513 -0.55119466 -0.4709241  -0.80406495  0.2016207 ]
+  Top-10 Scores: [ 2.57578513 -0.55119466 -0.4709241  -0.80406495  0.2016207   0.39993286
+  1.61773625  0.72965388  0.42650977  0.18820966]
+
+Target User U3 (User 16157):
+  Top-5 Scores:  [ 4.95319186 -1.27312941  2.95258001  0.13255917 -0.48431409]
+  Top-10 Scores: [ 4.95319186 -1.27312941  2.95258001  0.13255917 -0.48431409 -6.46257995
   5.55760746  5.34869295 -8.80298775 -8.86300383]
 
 ======================================================================
-Phase 4: Prediction via Reconstruction
+Phase 4 (Point 4 & 6): Rating Predictions
 ======================================================================
 
-=== Predictions Using Top-5 PCs ===
+=== Predictions Using Top-5 PCs (Point 4) ===
 
 --- Target User U1 (User 134471) ---
 
@@ -53,7 +157,7 @@ Phase 4: Prediction via Reconstruction
     Actual Rating: 3.74 (item mean)
     Error: 0.07
 
-=== Predictions Using Top-10 PCs ===
+=== Predictions Using Top-10 PCs (Point 6) ===
 
 --- Target User U1 (User 134471) ---
 

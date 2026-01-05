@@ -10,7 +10,7 @@ CODE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESULTS_DIR = os.path.join(CODE_DIR, '..', 'results')
 
 # =============================================================================
-# Step 1: Load Data and Calculate Item Means
+# Phase 0: Data Loading & Item Mean Calculation
 # =============================================================================
 
 from utils import (get_user_avg_ratings, get_item_avg_ratings, 
@@ -50,11 +50,11 @@ for i, item_id in enumerate(target_items, 1):
     print(f"I{i} (Item {item_id}): μ = {item_means_dict[item_id]:.6f}")
 
 # =============================================================================
-# Phase 1: Compute MLE Covariance Matrix
+# Phase 1 (Point 1): Generate MLE Covariance Matrix
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 1: Compute MLE Covariance Matrix")
+print("Phase 1 (Point 1): Generate MLE Covariance Matrix")
 print("=" * 70)
 
 
@@ -86,11 +86,11 @@ print(f"Var(I2): {cov_matrix_mle.loc[target_items[1], target_items[1]]:.6f}")
 print(f"Cov(I1, I2): {cov_matrix_mle.loc[target_items[0], target_items[1]]:.6f}")
 
 # =============================================================================
-# Phase 2: Eigen Decomposition
+# Phase 2 (Point 2): Eigen Decomposition + Top Peers
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 2: Eigen Decomposition")
+print("Phase 2 (Point 2): Eigen Decomposition + Top Peers")
 print("=" * 70)
 
 # Convert to numpy array
@@ -143,6 +143,29 @@ top10_eigenvalues_df.to_csv(os.path.join(RESULTS_DIR, 'mle_top10_eigenvalues.csv
 print("[Saved] mle_top10_eigenvalues.csv")
 
 # =============================================================================
+# Visualization 1: Top-10 Eigenvalues Bar Chart
+# =============================================================================
+import matplotlib.pyplot as plt
+PLOTS_DIR = os.path.join(CODE_DIR, '..', 'plots')
+
+print("\n[Creating Eigenvalues Bar Chart...]")
+fig, ax = plt.subplots(figsize=(8, 5))
+
+pcs = [f'PC{i+1}' for i in range(10)]
+top10_eig = eigenvalues[:10]
+
+ax.bar(pcs, top10_eig, color='steelblue', alpha=0.8)
+ax.set_xlabel('Principal Component', fontsize=12)
+ax.set_ylabel('Eigenvalue', fontsize=12)
+ax.set_title('MLE PCA: Top 10 Eigenvalues', fontsize=14)
+
+plt.tight_layout()
+plt.savefig(os.path.join(PLOTS_DIR, 'mle_eigenvalues.png'), dpi=150, bbox_inches='tight')
+plt.close()
+print("[Saved] mle_eigenvalues.png")
+
+
+# =============================================================================
 # Covariance Matrix: Before vs After Reduction
 # =============================================================================
 
@@ -150,53 +173,49 @@ print("\n" + "=" * 70)
 print("Covariance Matrix: Before vs After Reduction")
 print("=" * 70)
 
-# Before reduction: Original covariance matrix (for target items)
-print("\n--- BEFORE Reduction (Original Covariance for Target Items) ---")
-cov_before = cov_matrix_mle.loc[target_items, target_items]
-print(cov_before.round(6))
+# Before reduction: Original covariance matrix (FULL)
+print("\n--- BEFORE Reduction (Original Covariance Matrix) ---")
+# cov_matrix_mle is already the full matrix
+print(f"Shape: {cov_matrix_mle.shape}")
 
 # After reduction: Reconstructed covariance using Top-5 and Top-10 PCs
 # Reconstructed Σ ≈ W @ Λ @ W.T where Λ = diag(eigenvalues[:k])
 
-# Top-5 reconstruction
+# Top-5 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-5 PCs)...")
 Lambda_5 = np.diag(eigenvalues[:5])
 cov_reconstructed_5 = W_top5 @ Lambda_5 @ W_top5.T
 cov_reconstructed_5_df = pd.DataFrame(cov_reconstructed_5, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_5_df.shape}")
 
-print("\n--- AFTER Reduction: Reconstructed Covariance (Top-5 PCs) for Target Items ---")
-cov_after_5 = cov_reconstructed_5_df.loc[target_items, target_items]
-print(cov_after_5.round(6))
-
-# Top-10 reconstruction
+# Top-10 reconstruction (FULL)
+print("\nComputing Reconstructed Covariance Matrix (Top-10 PCs)...")
 Lambda_10 = np.diag(eigenvalues[:10])
 cov_reconstructed_10 = W_top10 @ Lambda_10 @ W_top10.T
 cov_reconstructed_10_df = pd.DataFrame(cov_reconstructed_10, index=all_items, columns=all_items)
+print(f"Shape: {cov_reconstructed_10_df.shape}")
 
-print("\n--- AFTER Reduction: Reconstructed Covariance (Top-10 PCs) for Target Items ---")
-cov_after_10 = cov_reconstructed_10_df.loc[target_items, target_items]
-print(cov_after_10.round(6))
-
-# Save covariance files separately
-print("\n[Saving covariance matrices...]")
+# Save covariance files separately (FULL MATRICES)
+print("\n[Saving FULL covariance matrices...]")
 
 # Before reduction
-cov_before.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_before_reduction.csv'))
+cov_matrix_mle.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_before_reduction.csv'))
 print("[Saved] mle_covariance_before_reduction.csv")
 
 # After Top-5 reduction
-cov_after_5.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_after_top5.csv'))
+cov_reconstructed_5_df.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_after_top5.csv'))
 print("[Saved] mle_covariance_after_top5.csv")
 
 # After Top-10 reduction
-cov_after_10.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_after_top10.csv'))
+cov_reconstructed_10_df.to_csv(os.path.join(RESULTS_DIR, 'mle_covariance_after_top10.csv'))
 print("[Saved] mle_covariance_after_top10.csv")
 
 # =============================================================================
-# Phase 3: Dimensionality Reduction - Project Users
+# Phase 3 (Point 3 & 5): Reduced Dimensional Space
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 3: Dimensionality Reduction - Calculate User Scores")
+print("Phase 3 (Point 3 & 5): Reduced Dimensional Space")
 print("=" * 70)
 
 
@@ -211,8 +230,8 @@ user_ratings = df.groupby('user').apply(
     lambda x: dict(zip(x['item'], x['rating']))
 ).to_dict()
 
-# Project all users using Top-5 PCs
-print("\nProjecting users using Top-5 PCs...")
+# Point 3: Reduced dimensional space using Top-5 peers
+print("\nProjecting users using Top-5 PCs (Point 3)...")
 user_scores_top5 = {}
 for i, user_id in enumerate(all_users):
     user_scores_top5[user_id] = project_user(
@@ -222,8 +241,8 @@ for i, user_id in enumerate(all_users):
         print(f"  Projected {i+1:,} users...")
 print(f"Projected all {len(all_users):,} users to 5-dimensional space.")
 
-# Project all users using Top-10 PCs
-print("\nProjecting users using Top-10 PCs...")
+# Point 5: Reduced dimensional space using Top-10 peers
+print("\nProjecting users using Top-10 PCs (Point 5)...")
 user_scores_top10 = {}
 for i, user_id in enumerate(all_users):
     user_scores_top10[user_id] = project_user(
@@ -241,20 +260,20 @@ for i, user_id in enumerate(target_users, 1):
     print(f"  Top-10 Scores: {user_scores_top10[user_id]}")
 
 # =============================================================================
-# Phase 4: Prediction via Reconstruction
+# Phase 4 (Point 4 & 6): Rating Predictions
 # =============================================================================
 
 print("\n" + "=" * 70)
-print("Phase 4: Prediction via Reconstruction")
+print("Phase 4 (Point 4 & 6): Rating Predictions")
 print("=" * 70)
 
 
 
 prediction_results = []
 
-for k_value, user_scores, W, label in [(5, user_scores_top5, W_top5, "Top-5 PCs"), 
-                                         (10, user_scores_top10, W_top10, "Top-10 PCs")]:
-    print(f"\n=== Predictions Using {label} ===")
+for k_value, user_scores, W, label, point_num in [(5, user_scores_top5, W_top5, "Top-5 PCs", 4), 
+                                                     (10, user_scores_top10, W_top10, "Top-10 PCs", 6)]:
+    print(f"\n=== Predictions Using {label} (Point {point_num}) ===")
     
     for u_idx, target_user in enumerate(target_users, 1):
         print(f"\n--- Target User U{u_idx} (User {target_user}) ---")
@@ -341,3 +360,78 @@ print("\n--- Saved Files ---")
 print("1. mle_covariance_matrix.csv - MLE covariance matrix")
 print("2. mle_target_item_peers.csv - Top 5 & Top 10 peers for each target item")
 print("3. mle_predictions.csv - Predictions for target items (Top-5 and Top-10)")
+
+# =============================================================================
+# Visualization 2: Prediction Error Comparison Bar Chart
+# =============================================================================
+print("\n[Creating Prediction Error Comparison Chart...]")
+
+# Prepare data for visualization
+top5_results = [r for r in prediction_results if r['PCs'] == 5]
+top10_results = [r for r in prediction_results if r['PCs'] == 10]
+
+labels = [f"{r['Target_User']}-{r['Target_Item']}" for r in top5_results]
+top5_errors = [r['Error'] for r in top5_results]
+top10_errors = [r['Error'] for r in top10_results]
+
+x = np.arange(len(labels))
+width = 0.35
+
+fig, ax = plt.subplots(figsize=(10, 6))
+bars1 = ax.bar(x - width/2, top5_errors, width, label='Top-5 PCs', color='coral', alpha=0.8)
+bars2 = ax.bar(x + width/2, top10_errors, width, label='Top-10 PCs', color='teal', alpha=0.8)
+
+ax.set_xlabel('User-Item Pair', fontsize=12)
+ax.set_ylabel('Absolute Error', fontsize=12)
+ax.set_title('MLE PCA: Prediction Error Comparison (Top-5 vs Top-10 PCs)', fontsize=14)
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+ax.legend()
+
+# Add value labels on bars
+for bar in bars1:
+    height = bar.get_height()
+    ax.annotate(f'{height:.2f}', xy=(bar.get_x() + bar.get_width()/2, height),
+                xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=9)
+for bar in bars2:
+    height = bar.get_height()
+    ax.annotate(f'{height:.2f}', xy=(bar.get_x() + bar.get_width()/2, height),
+                xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=9)
+
+fig.tight_layout()
+plt.savefig(os.path.join(PLOTS_DIR, 'mle_error_comparison.png'), dpi=150, bbox_inches='tight')
+plt.close()
+print("[Saved] mle_error_comparison.png")
+
+# =============================================================================
+# Visualization 3: Average Error Bar Chart (Top-5 vs Top-10)
+# =============================================================================
+print("\n[Creating Average Error Bar Chart...]")
+
+fig, ax = plt.subplots(figsize=(6, 5))
+
+# Calculate average errors
+avg_top5 = sum(top5_errors) / len(top5_errors)
+avg_top10 = sum(top10_errors) / len(top10_errors)
+
+methods = ['Top-5 PCs', 'Top-10 PCs']
+avg_errors = [avg_top5, avg_top10]
+colors = ['coral', 'teal']
+
+bars = ax.bar(methods, avg_errors, color=colors, alpha=0.8)
+ax.set_ylabel('Average Error', fontsize=12)
+ax.set_title('MLE PCA: Average Prediction Error', fontsize=14)
+
+# Add value labels
+for bar in bars:
+    height = bar.get_height()
+    ax.annotate(f'{height:.3f}', xy=(bar.get_x() + bar.get_width()/2, height),
+                xytext=(0, 3), textcoords="offset points", ha='center', fontsize=11)
+
+plt.tight_layout()
+plt.savefig(os.path.join(PLOTS_DIR, 'mle_avg_error.png'), dpi=150, bbox_inches='tight')
+plt.close()
+print("[Saved] mle_avg_error.png")
+
+print("\n[All visualizations saved to plots folder!]")
+

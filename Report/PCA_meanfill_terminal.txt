@@ -1,8 +1,332 @@
+User Average Ratings (r_u):
+   user   r_u_bar
+0     0  3.761905
+1     1  4.166667
+2     2  4.000000
+3     3  3.261905
+4     4  3.471014
+Shape: (147914, 2)
+
+Item Average Ratings (r_i):
+   item   r_i_bar
+0     0  3.382550
+1     1  4.123077
+2     2  3.525591
+3     3  4.833333
+4     4  3.895729
+Shape: (11123, 2)
+
+Target Users:
+[134471, 27768, 16157]
+
+Target Items:
+[1333, 1162]
+
+Preprocessed Dataset Shape: (2149655, 3)
+
+Filtering dataset to target items only...
+Filtered Dataset Shape: (4141, 3)
+
+Creating User-Item Rating Matrix for Target Items...
+Rating Matrix Shape: (4066, 2)
+(Rows = Users who rated target items, Columns = Target Items)
+
+Missing values before filling: 3,991 (49.08%)
+
+--- Mean Values for Target Items (I1 and I2) ---
+I1 (Item 1333): Mean = 3.694656
+I2 (Item 1162): Mean = 3.737722
+
+Applying Mean-Filling Method...
+Missing values after filling: 0
+
+--- Original Matrix (with missing values) ---
+item  1162  1333
+user
+7      NaN   3.0
+12     4.0   3.0
+64     3.0   NaN
+65     4.0   2.0
+93     NaN   4.0
+138    3.0   NaN
+152    3.0   NaN
+166    NaN   3.0
+170    4.0   NaN
+210    NaN   4.0
+
+--- Filled Matrix (missing values replaced with mean) ---
+item      1162      1333
+user
+7     3.737722  3.000000
+12    4.000000  3.000000
+64    3.000000  3.694656
+65    4.000000  2.000000
+93    3.737722  4.000000
+138   3.000000  3.694656
+152   3.000000  3.694656
+166   3.737722  3.000000
+170   4.000000  3.694656
+210   3.737722  4.000000
+
 ======================================================================
-PCA Mean-Filling Terminal Output
+Step 3: Calculate Average Rating for Each Item
 ======================================================================
 
-=== Predictions Using Top-10 PCs ===
+Item means for target items (from r_i):
+I1 (Item 1333): Mean = 3.694656
+I2 (Item 1162): Mean = 3.737722
+
+======================================================================
+Step 4: Calculate Centered Ratings (actual - mean) for ALL Items
+======================================================================
+
+Centered Ratings DataFrame Shape: (2149655, 5)
+
+Sample of centered ratings:
+     user  item  rating  item_mean  centered_rating
+0   59708     0       3   3.382550        -0.382550
+1    3781     1       4   4.123077        -0.123077
+2  120358     2       4   3.525591         0.474409
+3   55553     3       5   4.833333         0.166667
+4   20837     4       4   3.895729         0.104271
+5   62552     5       4   3.722326         0.277674
+6   25936     6       3   3.902284        -0.902284
+7     661     7       3   3.191358        -0.191358
+8    8370     8       3   3.641509        -0.641509
+9   48429     9       4   3.786667         0.213333
+
+--- Centered ratings sample for target items (I1=1333, I2=1162) ---
+        user  item  rating  item_mean  centered_rating
+1505   30448  1162       3   3.737722        -0.737722
+1796  143600  1333       4   3.694656         0.305344
+2529   38216  1162       3   3.737722        -0.737722
+2536   24479  1333       3   3.694656        -0.694656
+2677   48792  1333       3   3.694656        -0.694656
+2950   29543  1333       2   3.694656        -1.694656
+2994    3091  1333       4   3.694656         0.305344
+3140    4323  1162       3   3.737722        -0.737722
+3782   22127  1162       3   3.737722        -0.737722
+4004   71324  1333       4   3.694656         0.305344
+
+======================================================================
+Step 5 & 6: Compute Covariance Matrix for ALL Items
+======================================================================
+
+Total number of users (N): 147,914
+Total number of items: 11,123
+
+Computing covariance matrix for ALL items...
+(Using memory-efficient algorithm: only users who rated BOTH items contribute)
+(Dividing by N-1 for sample covariance)
+This may take a few minutes...
+Building user-item centered rating structure...
+Number of users with ratings: 147,914
+Number of items: 11,123
+Computing covariance matrix (11123 x 11123)...
+  Processed 50,000 users...
+  Processed 100,000 users...
+Covariance matrix computation complete!
+
+--- Covariance Matrix Shape ---
+Shape: (11123, 11123) (11123 x 11123)
+
+--- Covariance Values for Target Items (I1=1333, I2=1162) ---
+Var(I1): 0.008386
+Var(I2): 0.008237
+Cov(I1, I2): 0.000067
+
+--- Sample of Covariance Matrix (first 5x5) ---
+             0             1         2             3             4
+item
+0     0.001301  2.904636e-06  0.000002  0.000000e+00  6.136211e-06
+1     0.000003  1.149948e-03  0.000000  0.000000e+00  4.521092e-08
+2     0.000002  0.000000e+00  0.002046  0.000000e+00  5.258439e-06
+3     0.000000  0.000000e+00  0.000000  1.126788e-05  1.174918e-07
+4     0.000006  4.521092e-08  0.000005  1.174918e-07  4.399146e-03
+
+[Saving Step 5 & 6 results...]
+Saved full covariance matrix (11123x11123) to results folder.
+
+======================================================================
+Step 7: PCA Eigenvalue Decomposition
+======================================================================
+
+Computing eigenvalues and eigenvectors of the covariance matrix...
+Covariance matrix shape: (11123, 11123)
+
+--- Eigenvalues (Top 10) ---
+  lambda_1 = 0.044118
+  lambda_2 = 0.021755
+  lambda_3 = 0.021163
+  lambda_4 = 0.020252
+  lambda_5 = 0.019145
+  lambda_6 = 0.018785
+  lambda_7 = 0.018204
+  lambda_8 = 0.016950
+  lambda_9 = 0.016168
+  lambda_10 = 0.015986
+
+Total variance (sum of all eigenvalues): 9.258360
+
+--- Variance Explained ---
+  Top-5 PCs: 1.37%
+  Top-10 PCs: 2.30%
+
+--- Top 5 Principal Components (Eigenvectors) ---
+Shape: (11123, 5) (n_items x 5)
+
+--- Top 10 Principal Components (Eigenvectors) ---
+Shape: (11123, 10) (n_items x 10)
+
+[Saving eigenvalues...]
+[Saved] meanfill_top5_eigenvalues.csv
+[Saved] meanfill_top10_eigenvalues.csv
+
+======================================================================
+Covariance Matrix: Before vs After Reduction
+======================================================================
+
+--- BEFORE Reduction (Original Covariance Matrix) ---
+Shape: (11123, 11123)
+
+Computing Reconstructed Covariance Matrix (Top-5 PCs)...
+Shape: (11123, 11123)
+
+Computing Reconstructed Covariance Matrix (Top-10 PCs)...
+Shape: (11123, 11123)
+
+[Saving FULL covariance matrices...]
+[Saved] meanfill_covariance_before_reduction.csv
+[Saved] meanfill_covariance_after_top5.csv
+[Saved] meanfill_covariance_after_top10.csv
+
+======================================================================
+Step 8 & 10: Project Users into Reduced Latent Space
+======================================================================
+
+Total users to project: 147,914
+Building user-item rating lookup...
+
+Projecting all users using Top-5 PCs...
+  Projected 50,000 users...
+  Projected 100,000 users...
+Projected all 147,914 users to 5-dimensional space.
+
+Projecting all users using Top-10 PCs...
+  Projected 50,000 users...
+  Projected 100,000 users...
+Projected all 147,914 users to 10-dimensional space.
+
+--- Sample User Projections (Target Users) ---
+
+Target User U1 (User 134471):
+  Top-5 Vector:  [-0.07097138  0.01456619 -0.03222972  0.01290684  0.010203  ]
+  Top-10 Vector: [-0.07097138  0.01456619 -0.03222972  0.01290684  0.010203   -0.04518713
+ -0.01616413  0.01363865 -0.03877545  0.01939718]
+
+Target User U2 (User 27768):
+  Top-5 Vector:  [-2.67158135 -0.5075597  -0.41618929  0.50309954  0.06233004]
+  Top-10 Vector: [-2.67158135 -0.5075597  -0.41618929  0.50309954  0.06233004 -0.49061286
+ -0.24175303  0.45856336 -0.23995961  0.24071679]
+
+Target User U3 (User 16157):
+  Top-5 Vector:  [-3.88166264  0.57404583 -0.89731541  0.63756081 -0.14049977]
+  Top-10 Vector: [-3.88166264  0.57404583 -0.89731541  0.63756081 -0.14049977  0.59573445
+ -0.7519879  -0.01393509 -0.30112632 -0.41352021]
+
+======================================================================
+Step 9 & 11: User Similarity and Rating Prediction
+======================================================================
+
+--- Rating Predictions for Target Users on Target Items ---
+
+=== Using Top-5 PCs ===
+
+--- Target User U1 (User 134471) ---
+
+  Item I1 (Item 1333):
+    Item Mean: 3.69
+    Neighbors Used: 20
+    Predicted Rating: 3.3
+    Actual Rating: 3.69 (item mean)
+    Error: 0.39
+    Top 5 Neighbors:
+      User 98107: Sim=1.0, Rating=3, Centered=-0.69
+      User 42898: Sim=1.0, Rating=3, Centered=-0.69
+      User 48409: Sim=1.0, Rating=4, Centered=0.31
+      User 14882: Sim=0.99, Rating=4, Centered=0.31
+      User 73675: Sim=0.99, Rating=4, Centered=0.31
+
+  Item I2 (Item 1162):
+    Item Mean: 3.74
+    Neighbors Used: 20
+    Predicted Rating: 3.1
+    Actual Rating: 3.74 (item mean)
+    Error: 0.64
+    Top 5 Neighbors:
+      User 83084: Sim=1.0, Rating=3, Centered=-0.74
+      User 113941: Sim=1.0, Rating=4, Centered=0.26
+      User 48501: Sim=1.0, Rating=4, Centered=0.26
+      User 63082: Sim=0.99, Rating=3, Centered=-0.74
+      User 29484: Sim=0.99, Rating=4, Centered=0.26
+
+--- Target User U2 (User 27768) ---
+
+  Item I1 (Item 1333):
+    Item Mean: 3.69
+    Neighbors Used: 20
+    Predicted Rating: 3.2
+    Actual Rating: 3.69 (item mean)
+    Error: 0.49
+    Top 5 Neighbors:
+      User 214: Sim=1.0, Rating=3, Centered=-0.69
+      User 93428: Sim=0.99, Rating=3, Centered=-0.69
+      User 84000: Sim=0.99, Rating=4, Centered=0.31
+      User 39778: Sim=0.99, Rating=3, Centered=-0.69
+      User 127237: Sim=0.98, Rating=4, Centered=0.31
+
+  Item I2 (Item 1162):
+    Item Mean: 3.74
+    Neighbors Used: 20
+    Predicted Rating: 3.35
+    Actual Rating: 3.74 (item mean)
+    Error: 0.39
+    Top 5 Neighbors:
+      User 9072: Sim=0.99, Rating=3, Centered=-0.74
+      User 46253: Sim=0.98, Rating=4, Centered=0.26
+      User 11242: Sim=0.98, Rating=4, Centered=0.26
+      User 114960: Sim=0.98, Rating=4, Centered=0.26
+      User 25577: Sim=0.98, Rating=2, Centered=-1.74
+
+--- Target User U3 (User 16157) ---
+
+  Item I1 (Item 1333):
+    Item Mean: 3.69
+    Neighbors Used: 20
+    Predicted Rating: 2.85
+    Actual Rating: 3.69 (item mean)
+    Error: 0.84
+    Top 5 Neighbors:
+      User 66720: Sim=1.0, Rating=3, Centered=-0.69
+      User 66604: Sim=1.0, Rating=4, Centered=0.31
+      User 73523: Sim=1.0, Rating=2, Centered=-1.69
+      User 137352: Sim=1.0, Rating=3, Centered=-0.69
+      User 6086: Sim=1.0, Rating=3, Centered=-0.69
+
+  Item I2 (Item 1162):
+    Item Mean: 3.74
+    Neighbors Used: 20
+    Predicted Rating: 3.45
+    Actual Rating: 3.74 (item mean)
+    Error: 0.29
+    Top 5 Neighbors:
+      User 6086: Sim=1.0, Rating=3, Centered=-0.74
+      User 125364: Sim=1.0, Rating=4, Centered=0.26
+      User 3672: Sim=1.0, Rating=4, Centered=0.26
+      User 9207: Sim=1.0, Rating=4, Centered=0.26
+      User 28502: Sim=1.0, Rating=3, Centered=-0.74
+
+=== Using Top-10 PCs ===
 
 --- Target User U1 (User 134471) ---
 

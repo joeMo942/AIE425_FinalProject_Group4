@@ -11,7 +11,7 @@ __pycache__
 SECTION1_DimensionalityReduction/data/preprocessed_data.csv
 venv/
 *.csv
-pycache
+__pycache__
 *.pkl
 *.zip
 *.png
@@ -23,3 +23,13 @@ SECTION2_DomainRecommender/results/svd_predictions.npy
 !Report/SVD_terminal_output.txt
 !Report/SVD_conclusion.md
 !Report/SVD_analysis.md
+venv/
+*.csv
+__pycache__
+*.zip
+*.txt
+*.pkl
+*.png
+.env
+*.npy
+*.json
