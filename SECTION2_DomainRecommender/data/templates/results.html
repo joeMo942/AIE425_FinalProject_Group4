@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Recommendations - StreamerMatch</title>
+    <style>
+        :root {
+            --bg-color: #0e0e10;
+            --card-bg: #1f1f23;
+            --accent: #9147ff;
+            --text-primary: #efeff1;
+            --text-secondary: #adadb8;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 2rem;
+        }
+
+        .back-btn {
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: bold;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 10px;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            position: relative;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+            z-index: 10;
+        }
+
+        .card-header {
+            height: 80px;
+            background: linear-gradient(135deg, #4b367c 0%, #1f1f23 100%);
+            position: relative;
+        }
+
+        .avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 3px solid var(--card-bg);
+            position: absolute;
+            bottom: -30px;
+            left: 20px;
+            background: #000;
+        }
+
+        .card-body {
+            padding: 2.5rem 1.5rem 1.5rem;
+        }
+
+        .username {
+            font-size: 1.4rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            display: block;
+            color: #fff;
+            text-decoration: none;
+        }
+
+        .username:hover {
+            text-decoration: underline;
+        }
+
+        .meta {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+        }
+
+        .tag {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .score-bar {
+            height: 4px;
+            background: #333;
+            border-radius: 2px;
+            margin-top: 1rem;
+            overflow: hidden;
+        }
+
+        .score-fill {
+            height: 100%;
+            background: var(--accent);
+        }
+
+        .match-text {
+            font-size: 0.8rem;
+            color: var(--accent);
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Top Recommendations</h1>
+            <a href="/" class="back-btn">← Search Again</a>
+        </div>
+
+        <div class="grid">
+            {% for streamer in recommendations %}
+            <div class="card">
+                <div class="card-header">
+                    <img src="{{ streamer.img }}" alt="{{ streamer.streamer }}" class="avatar">
+                </div>
+                <div class="card-body">
+                    <a href="{{ streamer.url }}" target="_blank" class="username">{{ streamer.streamer }}</a>
+
+                    <div class="meta">
+                        <span class="tag">{{ streamer.game }}</span>
+                        <span class="tag">{{ streamer.lang }}</span>
+                        <span class="tag">👀 {{ streamer.viewers }} avg</span>
+                    </div>
+
+                    <div>
+                        <span class="match-text">Match Score: {{ "%.1f"|format(streamer.score) }}</span>
+                        <div class="score-bar">
+                            <!-- Normalize visual bar length somewhat arbitrarily for demo -->
+                            <div class="score-fill" style="width: {{ (streamer.score / 25) * 100 }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+
+</html>

@@ -25,8 +25,8 @@ from dotenv import load_dotenv
 # Load environment from project root (use absolute path)
 load_dotenv("/home/yousef/AIE425_FinalProject_GroupX/.env")
 
-DATA_DIR = Path(__file__).parent.parent / "data"
-RESULTS_DIR = Path(__file__).parent.parent / "results"
+DATA_DIR = Path(__file__).parent.parent
+RESULTS_DIR = Path(__file__).parent.parent.parent / "results"
 
 ITEMS_FILE = DATA_DIR / "streamer_metadata.csv"
 OUTPUT_FILE = DATA_DIR / "game_metadata.csv"

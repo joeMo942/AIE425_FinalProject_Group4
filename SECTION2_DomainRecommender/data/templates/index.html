@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StreamerMatch - Find Your Next Streamer</title>
+    <style>
+        :root {
+            --bg-color: #0e0e10;
+            --card-bg: #18181b;
+            --accent: #9147ff;
+            --accent-hover: #772ce8;
+            --text-primary: #efeff1;
+            --text-secondary: #adadb8;
+            --selected-border: #bf94ff;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            padding: 2rem;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0;
+            background: linear-gradient(135deg, #fff 0%, #9147ff 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -1px;
+        }
+
+        p.subtitle {
+            color: var(--text-secondary);
+            font-size: 1.2rem;
+            margin-top: 0.5rem;
+        }
+
+        form {
+            background: var(--card-bg);
+            padding: 2.5rem;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .step {
+            margin-bottom: 2.5rem;
+        }
+
+        label {
+            display: block;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+        }
+
+        .helper-text {
+            display: block;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            margin-bottom: 1rem;
+            margin-top: -0.8rem;
+        }
+
+        /* Game Grid Styles */
+        .game-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+            gap: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            padding: 10px;
+            background: #000;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+
+        .game-card {
+            cursor: pointer;
+            text-align: center;
+            padding: 10px;
+            border-radius: 8px;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+            background: #1f1f23;
+        }
+
+        .game-card:hover {
+            background: #26262c;
+            transform: translateY(-2px);
+        }
+
+        .game-card.selected {
+            border-color: var(--accent);
+            background: rgba(145, 71, 255, 0.1);
+            box-shadow: 0 0 10px rgba(145, 71, 255, 0.3);
+        }
+
+        .game-img {
+            width: 60px;
+            height: 60px;
+            border-radius: 12px;
+            margin-bottom: 8px;
+            object-fit: cover;
+        }
+
+        .game-title {
+            font-size: 0.8rem;
+            line-height: 1.2;
+            word-wrap: break-word;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        /* Language Select */
+        select {
+            width: 100%;
+            background: #000;
+            color: #fff;
+            border: 1px solid #333;
+            border-radius: 8px;
+            padding: 1rem;
+            font-size: 1rem;
+            min-height: 120px;
+        }
+
+        select:focus {
+            outline: 2px solid var(--accent);
+            border-color: transparent;
+        }
+
+        button {
+            width: 100%;
+            background: var(--accent);
+            color: white;
+            border: none;
+            padding: 1.2rem;
+            font-size: 1.2rem;
+            font-weight: bold;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 15px rgba(145, 71, 255, 0.4);
+        }
+
+        button:hover {
+            background: var(--accent-hover);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(145, 71, 255, 0.6);
+        }
+
+        /* Hidden Select for Form Submission */
+        .hidden-select {
+            display: none;
+        }
+
+        /* CustomScrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0e0e10;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #333;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>StreamerMatch</h1>
+            <p class="subtitle">Discover Twitch streamers tailored to your taste.</p>
+        </div>
+
+        <form action="/recommend" method="post" id="recForm">
+            <!-- Step 1: Games -->
+            <div class="step">
+                <label>1. Select Games (Pick at least 1)</label>
+                <span class="helper-text">Click to select/deselect.</span>
+
+                <div class="game-grid">
+                    {% for game in games %}
+                    <div class="game-card" data-value="{{ game.name }}">
+                        <!-- Use fetched real image URL -->
+                        <img src="{{ game.image }}" alt="{{ game.name }}" class="game-img">
+                        <div class="game-title">{{ game.name }}</div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <!-- Hidden Select to store values -->
+                <select name="selected_games" id="hidden_games" class="hidden-select" multiple required>
+                    {% for game in games %}
+                    <option value="{{ game.name }}">{{ game.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Step 2: Language -->
+            <div class="step">
+                <label for="languages">2. Preferred Language(s)</label>
+                <select name="languages" id="languages" multiple required>
+                    <option value="English" selected>English</option>
+                    {% for lang in languages %}
+                    {% if lang != "English" %}
+                    <option value="{{ lang }}">{{ lang }}</option>
+                    {% endif %}
+                    {% endfor %}
+                </select>
+            </div>
+
+            <button type="submit" id="submitBtn">Find Streamers 🚀</button>
+        </form>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const cards = document.querySelectorAll('.game-card');
+            const hiddenSelect = document.getElementById('hidden_games');
+            const submitBtn = document.getElementById('submitBtn');
+
+            cards.forEach(card => {
+                card.addEventListener('click', function () {
+                    this.classList.toggle('selected');
+                    updateSelection();
+                });
+            });
+
+            function updateSelection() {
+                const selectedCards = document.querySelectorAll('.game-card.selected');
+                const selectedValues = Array.from(selectedCards).map(c => c.getAttribute('data-value'));
+
+                // Update hidden select options
+                Array.from(hiddenSelect.options).forEach(option => {
+                    option.selected = selectedValues.includes(option.value);
+                });
+
+                // Visual validation
+                if (selectedValues.length === 0) {
+                    submitBtn.style.opacity = '0.5';
+                    submitBtn.innerText = "Select at least 1 game";
+                } else {
+                    submitBtn.style.opacity = '1';
+                    submitBtn.innerText = "Find Streamers 🚀";
+                }
+            }
+
+            // Validate on submit
+            document.getElementById('recForm').addEventListener('submit', function (e) {
+                const selected = document.querySelectorAll('.game-card.selected');
+                if (selected.length === 0) {
+                    e.preventDefault();
+                    alert("Please select at least one game!");
+                }
+            });
+        });
+    </script>
+</body>
+
+</html>

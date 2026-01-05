@@ -33,6 +33,11 @@ TOP_N = 10  # Number of recommendations
 K_NEIGHBORS = 30  # Reduced from 50 for less smoothing, better unique tastes
 
 
+
+# ============================================================================
+# PART 1: DATA LOADING
+# ============================================================================
+
 def load_data():
     """Load ratings data."""
     print("=" * 60)
@@ -47,6 +52,11 @@ def load_data():
     
     return df_ratings
 
+
+
+# ============================================================================
+# PART 2: MATRIX CONSTRUCTION
+# ============================================================================
 
 def create_user_item_matrix(df_ratings):
     """
@@ -97,6 +107,11 @@ def create_user_item_matrix(df_ratings):
         'binary_matrix': (user_item_matrix > 0).astype(float)  # Pre-compute binary matrix for co-ratings
     }
 
+
+
+# ============================================================================
+# PART 3: SIMILARITY COMPUTATION
+# ============================================================================
 
 def compute_user_similarity(matrix_data):
     """
@@ -211,6 +226,11 @@ def compute_discount_beta(matrix_data, sample_size=1000):
     
     return beta
 
+
+
+# ============================================================================
+# PART 4: PREDICTION LOGIC
+# ============================================================================
 
 def predict_rating(user_idx, item_idx, matrix_data, similarity_matrix, 
                    user_means, k_neighbors=K_NEIGHBORS, discount_beta=None):
@@ -360,6 +380,11 @@ def recommend_for_user(user_id, matrix_data, similarity_matrix, user_means,
     return predictions[:n_recommendations]
 
 
+
+# ============================================================================
+# PART 5: EVALUATION
+# ============================================================================
+
 def evaluate_recommendations(df_ratings, matrix_data, similarity_matrix, 
                             user_means, n_users=100, discount_beta=None):
     """
@@ -475,6 +500,11 @@ def generate_sample_recommendations(df_ratings, matrix_data, similarity_matrix,
     
     return results
 
+
+
+# ============================================================================
+# PART 7: MODEL PERSISTENCE
+# ============================================================================
 
 def save_model(matrix_data, similarity_matrix, user_means):
     """Save trained model for later use."""
@@ -704,6 +734,11 @@ def save_svd_model(svd_data, matrix_data):
         pickle.dump(model, f)
     print(f"[SAVED] {svd_model_path.name}")
 
+
+
+# ============================================================================
+# MAIN PIPELINE
+# ============================================================================
 
 def main():
     """Main collaborative filtering pipeline."""

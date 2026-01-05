@@ -45,7 +45,7 @@ except ImportError:
 # ============================================================================
 # Configuration
 # ============================================================================
-DATA_DIR = Path(__file__).parent.parent / "data"
+DATA_DIR = Path(__file__).parent.parent
 OUTPUT_FILE = DATA_DIR / "streamer_metadata_fixed.csv"
 CHECKPOINT_FILE = DATA_DIR / "scraper_checkpoint.json"
 FAILED_FILE = DATA_DIR / "failed_streamers.txt"
@@ -65,6 +65,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
+
+# ============================================================================
+# PART 1: DRIVER SETUP
+# ============================================================================
 
 def create_driver(headless: bool = True):
     """
@@ -157,6 +162,11 @@ def login_to_twitchtracker(driver: webdriver.Chrome, wait_for_manual: bool = Tru
         print(f"[LOGIN] Error during login: {e}")
         return False
 
+
+
+# ============================================================================
+# PART 2: HELPER FUNCTIONS
+# ============================================================================
 
 def extract_number(text: str) -> Optional[int]:
     """Extract first number from text, handling commas and K/M suffixes."""
@@ -267,6 +277,11 @@ def fetch_games_from_games_page(driver: webdriver.Chrome, username: str) -> list
         logger.debug(f"Error fetching games for {username}: {str(e)[:30]}")
         return []
 
+
+
+# ============================================================================
+# PART 3: SCRAPING LOGIC
+# ============================================================================
 
 def scrape_streamer(driver: webdriver.Chrome, username: str) -> Optional[Dict]:
     """
@@ -548,6 +563,11 @@ def scrape_streamer(driver: webdriver.Chrome, username: str) -> Optional[Dict]:
         return None
 
 
+
+# ============================================================================
+# PART 4: CHECKPOINTING
+# ============================================================================
+
 def load_checkpoint() -> Dict:
     """Load checkpoint from previous run."""
     if CHECKPOINT_FILE.exists():
@@ -575,6 +595,11 @@ def save_results_csv(results: List[Dict]):
         df = pd.DataFrame(results)
         df.to_csv(OUTPUT_FILE, index=False)
 
+
+
+# ============================================================================
+# MAIN EXECUTION
+# ============================================================================
 
 def main():
     """Main scraping pipeline."""
