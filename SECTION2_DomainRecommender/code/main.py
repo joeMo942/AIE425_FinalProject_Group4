@@ -154,7 +154,7 @@ async def recommend(request: Request, selected_games: list = Form(...), language
     # Content-Based Matching Logic
     scores = []
     
-    for _, row in df_items.iterrows():
+    for _, row in df_items.iterrows(): # type: ignore
         score = 0
         feature_text = str(row['text_features']).lower()
         
