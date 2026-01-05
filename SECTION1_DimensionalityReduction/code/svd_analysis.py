@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import os
 import sys
 import gc
+import time
+import tracemalloc
 from scipy.sparse import csr_matrix
 from scipy.sparse.linalg import svds
 
@@ -350,7 +352,37 @@ def compute_full_svd(filled_matrix):
     #   U: m x m (5000 x 5000)
     #   sigma: min(m,n) singular values (2000)
     #   Vt: n x n (2000 x 2000)
+    
+    # --- Performance Measurement ---
+    print("        [PERFORMANCE] Measuring SVD time and memory...")
+    tracemalloc.start()
+    start_time = time.time()
+    
     U, sigma, Vt = np.linalg.svd(R, full_matrices=True)
+    
+    end_time = time.time()
+    current_mem, peak_mem = tracemalloc.get_traced_memory()
+    tracemalloc.stop()
+    
+    execution_time = end_time - start_time
+    peak_memory_mb = peak_mem / (1024 * 1024)
+    
+    print(f"        [RESULT] Execution Time: {execution_time:.4f} seconds")
+    print(f"        [RESULT] Peak Memory Increase: {peak_memory_mb:.2f} MB")
+    
+    # Save performance metrics to global/results
+    try:
+        perf_path = os.path.join(RESULTS_DIR, 'svd_performance.txt')
+        with open(perf_path, 'w') as f:
+            f.write("SVD Decomposition Performance\n")
+            f.write("=============================\n")
+            f.write(f"Matrix Shape: {m} x {n}\n")
+            f.write(f"Execution Time: {execution_time:.6f} seconds\n")
+            f.write(f"Peak Memory Usage: {peak_memory_mb:.4f} MB\n")
+        print(f"        Saved: {perf_path}")
+    except Exception as e:
+        print(f"        [WARNING] Could not save performance metrics: {e}")
+    # -------------------------------
     
     # Create full Sigma matrix (m x n) with singular values on diagonal
     Sigma_full = np.zeros((m, n))

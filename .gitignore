@@ -1,3 +1,13 @@
+venv/
+*.csv
+__pycache__
+*.zip
+*.txt
+*.pkl
+*.png
+.env
+*.npy
+*.json
 SECTION1_DimensionalityReduction/data/preprocessed_data.csv
 venv/
 *.csv
